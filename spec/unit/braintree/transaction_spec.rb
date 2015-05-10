@@ -102,8 +102,8 @@ describe Braintree::Transaction do
       disbursement.settlement_amount.should == "120.00"
       disbursement.settlement_currency_iso_code.should == "USD"
       disbursement.settlement_currency_exchange_rate.should == "1"
-      disbursement.funds_held?.should be_false
-      disbursement.success?.should be_true
+      disbursement.funds_held?.should be(false)
+      disbursement.success?.should be(true)
     end
 
     it "sets up credit card attributes in credit_card_details" do
@@ -141,6 +141,23 @@ describe Braintree::Transaction do
       transaction.credit_card_details.commercial.should == Braintree::CreditCard::Commercial::No
       transaction.credit_card_details.country_of_issuance.should == "Narnia"
       transaction.credit_card_details.issuing_bank.should == "Mr Tumnus"
+    end
+
+    it "sets up three_d_secure_info" do
+      transaction = Braintree::Transaction._new(
+        :gateway,
+        :three_d_secure_info => {
+          :enrolled => "Y",
+          :liability_shifted => true,
+          :liability_shift_possible => true,
+          :status => "authenticate_successful",
+        }
+      )
+
+      transaction.three_d_secure_info.enrolled.should == "Y"
+      transaction.three_d_secure_info.status.should == "authenticate_successful"
+      transaction.three_d_secure_info.liability_shifted.should == true
+      transaction.three_d_secure_info.liability_shift_possible.should == true
     end
 
     it "sets up history attributes in status_history" do

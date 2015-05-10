@@ -1,7 +1,13 @@
 module Braintree
-  # See http://www.braintreepayments.com/docs/ruby/subscriptions/overview
   class Subscription
     include BaseModule
+
+    module Source
+      Api          = "api"
+      ControlPanel = "control_panel"
+      Recurring    = "recurring"
+      Unrecognized = "unrecognized"
+    end
 
     module Status
       Active = 'Active'
@@ -30,13 +36,12 @@ module Braintree
     attr_reader :descriptor
     attr_reader :current_billing_cycle
     attr_reader :updated_at, :created_at
+    attr_reader :status_history
 
-    # See http://www.braintreepayments.com/docs/ruby/subscriptions/cancel
     def self.cancel(subscription_id)
       config.gateway.subscription.cancel(subscription_id)
     end
 
-    # See http://www.braintreepayments.com/docs/ruby/subscriptions/create
     def self.create(attributes)
       config.gateway.subscription.create(attributes)
     end
@@ -45,7 +50,6 @@ module Braintree
       return_object_or_raise(:subscription) { create(attributes) }
     end
 
-    # See http://www.braintreepayments.com/docs/ruby/subscriptions/search
     def self.find(id)
       config.gateway.subscription.find(id)
     end
@@ -59,7 +63,6 @@ module Braintree
       config.gateway.subscription.search(&block)
     end
 
-    # See http://www.braintreepayments.com/docs/ruby/subscriptions/update
     def self.update(subscription_id, attributes)
       config.gateway.subscription.update(subscription_id, attributes)
     end
@@ -77,6 +80,7 @@ module Braintree
       transactions.map! { |attrs| Transaction._new(gateway, attrs) }
       add_ons.map! { |attrs| AddOn._new(attrs) }
       discounts.map! { |attrs| Discount._new(attrs) }
+      @status_history = attributes[:status_history] ? attributes[:status_history].map { |s| StatusDetails.new(s) } : []
     end
 
     def next_bill_amount
