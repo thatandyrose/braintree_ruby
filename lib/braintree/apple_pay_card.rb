@@ -1,5 +1,4 @@
 module Braintree
-  # See https://developers.braintreepayments.com/ios+ruby/sdk/server
   class ApplePayCard
     include BaseModule # :nodoc:
 
@@ -13,13 +12,17 @@ module Braintree
 
     attr_reader :token, :card_type, :last_4, :default, :image_url,
       :created_at, :updated_at, :subscriptions, :expiration_month,
-      :expiration_year, :expired
+      :expiration_year, :expired, :payment_instrument_name
 
 
     def initialize(gateway, attributes) # :nodoc:
       @gateway = gateway
       set_instance_variables_from_hash(attributes)
       @subscriptions = (@subscriptions || []).map { |subscription_hash| Subscription._new(@gateway, subscription_hash) }
+    end
+
+    def default?
+      @default
     end
 
     class << self

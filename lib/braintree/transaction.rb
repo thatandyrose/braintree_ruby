@@ -1,5 +1,4 @@
 module Braintree
-  # See http://www.braintreepayments.com/docs/ruby/transactions/overview
   class Transaction
     include BaseModule
 
@@ -24,6 +23,7 @@ module Braintree
       CVV          = "cvv"
       Duplicate    = "duplicate"
       Fraud        = "fraud"
+      ThreeDSecure = "three_d_secure"
       Unrecognized = "unrecognized"
     end
 
@@ -83,6 +83,7 @@ module Braintree
     attr_reader :billing_details, :shipping_details
     attr_reader :paypal_details
     attr_reader :apple_pay_details
+    attr_reader :coinbase_details
     attr_reader :plan_id
     # The authorization code from the processor.
     attr_reader :processor_authorization_code
@@ -113,13 +114,12 @@ module Braintree
     attr_reader :add_ons, :discounts
     attr_reader :payment_instrument_type
     attr_reader :risk_data
+    attr_reader :three_d_secure_info
 
-    # See http://www.braintreepayments.com/docs/ruby/transactions/create
     def self.create(attributes)
       config.gateway.transaction.create(attributes)
     end
 
-    # See http://www.braintreepayments.com/docs/ruby/transactions/create
     def self.create!(attributes)
       return_object_or_raise(:transaction) { create(attributes) }
     end
@@ -141,16 +141,12 @@ module Braintree
     end
 
     # Deprecated. Use Braintree::TransparentRedirect.confirm
-    #
-    # See http://www.braintreepayments.com/docs/ruby/transactions/create_tr
     def self.create_from_transparent_redirect(query_string)
       warn "[DEPRECATED] Transaction.create_from_transparent_redirect is deprecated. Please use TransparentRedirect.confirm"
       config.gateway.transaction.create_from_transparent_redirect(query_string)
     end
 
     # Deprecated. Use Braintree::TransparentRedirect.url
-    #
-    # See http://www.braintreepayments.com/docs/ruby/transactions/create_tr
     def self.create_transaction_url
       warn "[DEPRECATED] Transaction.create_transaction_url is deprecated. Please use TransparentRedirect.url"
       config.gateway.transaction.create_transaction_url
@@ -164,7 +160,6 @@ module Braintree
       return_object_or_raise(:transaction) { credit(attributes) }
     end
 
-    # See http://www.braintreepayments.com/docs/ruby/transactions/search
     def self.find(id)
       config.gateway.transaction.find(id)
     end
@@ -177,22 +172,18 @@ module Braintree
       return_object_or_raise(:transaction) { hold_in_escrow(id) }
     end
 
-    # See http://www.braintreepayments.com/docs/ruby/transactions/refund
     def self.refund(id, amount = nil)
       config.gateway.transaction.refund(id, amount)
     end
 
-    # See http://www.braintreepayments.com/docs/ruby/transactions/refund
     def self.refund!(id, amount = nil)
       return_object_or_raise(:transaction) { refund(id, amount) }
     end
 
-    # See http://www.braintreepayments.com/docs/ruby/transactions/create
     def self.sale(attributes)
       config.gateway.transaction.sale(attributes)
     end
 
-    # See http://www.braintreepayments.com/docs/ruby/transactions/create
     def self.sale!(attributes)
       return_object_or_raise(:transaction) { sale(attributes) }
     end
@@ -210,22 +201,18 @@ module Braintree
       return_object_or_raise(:transaction) { release_from_escrow(transaction_id) }
     end
 
-    # See http://www.braintreepayments.com/docs/ruby/transactions/submit_for_settlement
     def self.submit_for_settlement(transaction_id, amount = nil)
       config.gateway.transaction.submit_for_settlement(transaction_id, amount)
     end
 
-    # See http://www.braintreepayments.com/docs/ruby/transactions/submit_for_settlement
     def self.submit_for_settlement!(transaction_id, amount = nil)
       return_object_or_raise(:transaction) { submit_for_settlement(transaction_id, amount) }
     end
 
-    # See http://www.braintreepayments.com/docs/ruby/transactions/void
     def self.void(transaction_id)
       config.gateway.transaction.void(transaction_id)
     end
 
-    # See http://www.braintreepayments.com/docs/ruby/transactions/void
     def self.void!(transaction_id)
       return_object_or_raise(:transaction) { void(transaction_id) }
     end
@@ -246,12 +233,14 @@ module Braintree
       @descriptor = Descriptor.new(@descriptor)
       @paypal_details = PayPalDetails.new(@paypal)
       @apple_pay_details = ApplePayDetails.new(@apple_pay)
+      @coinbase_details = CoinbaseDetails.new(@coinbase_account)
       disputes.map! { |attrs| Dispute._new(attrs) } if disputes
       @custom_fields = attributes[:custom_fields].is_a?(Hash) ? attributes[:custom_fields] : {}
       add_ons.map! { |attrs| AddOn._new(attrs) } if add_ons
       discounts.map! { |attrs| Discount._new(attrs) } if discounts
       @payment_instrument_type = attributes[:payment_instrument_type]
       @risk_data = RiskData.new(attributes[:risk_data]) if attributes[:risk_data]
+      @three_d_secure_info = ThreeDSecureInfo.new(attributes[:three_d_secure_info]) if attributes[:three_d_secure_info]
     end
 
     # True if <tt>other</tt> is a Braintree::Transaction with the same id.
@@ -274,8 +263,6 @@ module Braintree
     end
 
     # Deprecated. Use Braintree::Transaction.refund
-    #
-    # See http://www.braintreepayments.com/docs/ruby/transactions/refund
     def refund(amount = nil)
       warn "[DEPRECATED] refund as an instance method is deprecated. Please use Transaction.refund"
       result = @gateway.transaction.refund(id, amount)
@@ -303,8 +290,6 @@ module Braintree
     end
 
     # Deprecated. Use Braintree::Transaction.submit_for_settlement
-    #
-    # See http://www.braintreepayments.com/docs/ruby/transactions/submit_for_settlement
     def submit_for_settlement(amount = nil)
       warn "[DEPRECATED] submit_for_settlement as an instance method is deprecated. Please use Transaction.submit_for_settlement"
       result = @gateway.transaction.submit_for_settlement(id, amount)
@@ -315,8 +300,6 @@ module Braintree
     end
 
     # Deprecated. Use Braintree::Transaction.submit_for_settlement!
-    #
-    # See http://www.braintreepayments.com/docs/ruby/transactions/submit_for_settlement
     def submit_for_settlement!(amount = nil)
       warn "[DEPRECATED] submit_for_settlement! as an instance method is deprecated. Please use Transaction.submit_for_settlement!"
       return_object_or_raise(:transaction) { submit_for_settlement(amount) }
@@ -359,8 +342,6 @@ module Braintree
     end
 
     # Deprecated. Use Braintree::Transaction.void
-    #
-    # See http://www.braintreepayments.com/docs/ruby/transactions/void
     def void
       warn "[DEPRECATED] void as an instance method is deprecated. Please use Transaction.void"
       result = @gateway.transaction.void(id)
@@ -371,8 +352,6 @@ module Braintree
     end
 
     # Deprecated. Use Braintree::Transaction.void!
-    #
-    # See http://www.braintreepayments.com/docs/ruby/transactions/void
     def void!
       warn "[DEPRECATED] void! as an instance method is deprecated. Please use Transaction.void!"
       return_object_or_raise(:transaction) { void }

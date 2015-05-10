@@ -1,5 +1,4 @@
 module Braintree
-  # See http://www.braintreepayments.com/docs/ruby
   class Plan
     include BaseModule
 
