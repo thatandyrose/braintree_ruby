@@ -18,6 +18,7 @@ module Braintree
     end
 
     module GatewayRejectionReason
+      ApplicationIncomplete = "application_incomplete"
       AVS          = "avs"
       AVSAndCVV    = "avs_and_cvv"
       CVV          = "cvv"
@@ -83,6 +84,9 @@ module Braintree
     attr_reader :billing_details, :shipping_details
     attr_reader :paypal_details
     attr_reader :apple_pay_details
+    attr_reader :android_pay_details
+    attr_reader :amex_express_checkout_details
+    attr_reader :venmo_account_details
     attr_reader :coinbase_details
     attr_reader :plan_id
     # The authorization code from the processor.
@@ -102,6 +106,8 @@ module Braintree
     attr_reader :recurring
     attr_reader :refund_ids, :refunded_transaction_id
     attr_reader :settlement_batch_id
+    attr_reader :authorized_transaction_id
+    attr_reader :partial_settlement_transaction_ids
     # See Transaction::Status
     attr_reader :status
     attr_reader :status_history
@@ -114,6 +120,7 @@ module Braintree
     attr_reader :add_ons, :discounts
     attr_reader :payment_instrument_type
     attr_reader :risk_data
+    attr_reader :facilitator_details
     attr_reader :three_d_secure_info
 
     def self.create(attributes)
@@ -201,12 +208,20 @@ module Braintree
       return_object_or_raise(:transaction) { release_from_escrow(transaction_id) }
     end
 
-    def self.submit_for_settlement(transaction_id, amount = nil)
-      config.gateway.transaction.submit_for_settlement(transaction_id, amount)
+    def self.submit_for_settlement(transaction_id, amount = nil, options = {})
+      config.gateway.transaction.submit_for_settlement(transaction_id, amount, options)
     end
 
-    def self.submit_for_settlement!(transaction_id, amount = nil)
-      return_object_or_raise(:transaction) { submit_for_settlement(transaction_id, amount) }
+    def self.submit_for_settlement!(transaction_id, amount = nil, options = {})
+      return_object_or_raise(:transaction) { submit_for_settlement(transaction_id, amount, options) }
+    end
+
+    def self.submit_for_partial_settlement(authorized_transaction_id, amount = nil, options = {})
+      Configuration.gateway.transaction.submit_for_partial_settlement(authorized_transaction_id, amount, options)
+    end
+
+    def self.submit_for_partial_settlement!(authorized_transaction_id, amount = nil, options = {})
+      return_object_or_raise(:transaction) { submit_for_partial_settlement(authorized_transaction_id, amount, options) }
     end
 
     def self.void(transaction_id)
@@ -233,6 +248,9 @@ module Braintree
       @descriptor = Descriptor.new(@descriptor)
       @paypal_details = PayPalDetails.new(@paypal)
       @apple_pay_details = ApplePayDetails.new(@apple_pay)
+      @android_pay_details = AndroidPayDetails.new(@android_pay_card)
+      @amex_express_checkout_details = AmexExpressCheckoutDetails.new(@amex_express_checkout_card)
+      @venmo_account_details = VenmoAccountDetails.new(@venmo_account)
       @coinbase_details = CoinbaseDetails.new(@coinbase_account)
       disputes.map! { |attrs| Dispute._new(attrs) } if disputes
       @custom_fields = attributes[:custom_fields].is_a?(Hash) ? attributes[:custom_fields] : {}
@@ -240,6 +258,7 @@ module Braintree
       discounts.map! { |attrs| Discount._new(attrs) } if discounts
       @payment_instrument_type = attributes[:payment_instrument_type]
       @risk_data = RiskData.new(attributes[:risk_data]) if attributes[:risk_data]
+      @facilitator_details = FacilitatorDetails.new(attributes[:facilitator_details]) if attributes[:facilitator_details]
       @three_d_secure_info = ThreeDSecureInfo.new(attributes[:three_d_secure_info]) if attributes[:three_d_secure_info]
     end
 

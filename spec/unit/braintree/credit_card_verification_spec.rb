@@ -29,7 +29,21 @@ describe Braintree::CreditCardVerification do
         :merchant_account_id => "some_id"
       )
 
-      verification.status.should == Braintree::CreditCardVerification::Status::VERIFIED
+      verification.status.should == Braintree::CreditCardVerification::Status::Verified
+    end
+  end
+
+  describe "self.create" do
+    it "rejects invalid parameters" do
+      expect do
+        Braintree::CreditCardVerification.create(:invalid_key => 4, :credit_card => {:number => "number"})
+      end.to raise_error(ArgumentError, "invalid keys: invalid_key")
+    end
+
+    it "rejects parameters that are only valid for 'payment methods create'" do
+      expect do
+        Braintree::CreditCardVerification.create(:credit_card => {:options => {:verify_card => true}})
+      end.to raise_error(ArgumentError, "invalid keys: credit_card[options][verify_card]")
     end
   end
 
@@ -95,4 +109,3 @@ describe Braintree::CreditCardVerification do
     end
   end
 end
-

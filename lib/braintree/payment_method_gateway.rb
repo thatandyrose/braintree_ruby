@@ -3,6 +3,7 @@ module Braintree
     def initialize(gateway)
       @gateway = gateway
       @config = gateway.config
+      @config.assert_has_access_token_or_keys
     end
 
     def create(attributes)
@@ -10,8 +11,8 @@ module Braintree
       _do_create("/payment_methods", :payment_method => attributes)
     end
 
-    def _do_create(url, params=nil) # :nodoc:
-      response = @config.http.post url, params
+    def _do_create(path, params=nil) # :nodoc:
+      response = @config.http.post("#{@config.base_merchant_path}#{path}", params)
       if response[:credit_card]
         SuccessfulResult.new(:payment_method => CreditCard._new(@gateway, response[:credit_card]))
       elsif response[:paypal_account]
@@ -22,6 +23,16 @@ module Braintree
         SuccessfulResult.new(:payment_method => EuropeBankAccount._new(@gateway, response[:europe_bank_account]))
       elsif response[:apple_pay_card]
         SuccessfulResult.new(:payment_method => ApplePayCard._new(@gateway, response[:apple_pay_card]))
+      elsif response[:android_pay_card]
+        SuccessfulResult.new(:payment_method => AndroidPayCard._new(@gateway, response[:android_pay_card]))
+      elsif response[:amex_express_checkout_card]
+        SuccessfulResult.new(:payment_method => AmexExpressCheckoutCard._new(@gateway, response[:amex_express_checkout_card]))
+      elsif response[:venmo_account]
+        SuccessfulResult.new(:payment_method => VenmoAccount._new(@gateway, response[:venmo_account]))
+      elsif response[:payment_method_nonce]
+        SuccessfulResult.new(:payment_method_nonce => PaymentMethodNonce._new(@gateway, response[:payment_method_nonce]))
+      elsif response[:success]
+        SuccessfulResult.new
       elsif response[:api_error_response]
         ErrorResult.new(@gateway, response[:api_error_response])
       elsif response
@@ -32,12 +43,13 @@ module Braintree
     end
 
     def delete(token)
-      @config.http.delete("/payment_methods/any/#{token}")
+      @config.http.delete("#{@config.base_merchant_path}/payment_methods/any/#{token}")
+      SuccessfulResult.new
     end
 
     def find(token)
       raise ArgumentError if token.nil? || token.to_s.strip == ""
-      response = @config.http.get "/payment_methods/any/#{token}"
+      response = @config.http.get("#{@config.base_merchant_path}/payment_methods/any/#{token}")
       if response.has_key?(:credit_card)
         CreditCard._new(@gateway, response[:credit_card])
       elsif response.has_key?(:paypal_account)
@@ -48,6 +60,8 @@ module Braintree
         EuropeBankAccount._new(@gateway, response[:europe_bank_account])
       elsif response.has_key?(:apple_pay_card)
         ApplePayCard._new(@gateway, response[:apple_pay_card])
+      elsif response.has_key?(:android_pay_card)
+        AndroidPayCard._new(@gateway, response[:android_pay_card])
       else
         UnknownPaymentMethod._new(@gateway, response)
       end
@@ -60,8 +74,35 @@ module Braintree
       _do_update(:put, "/payment_methods/any/#{token}", :payment_method => attributes)
     end
 
-    def _do_update(http_verb, url, params) # :nodoc:
-      response = @config.http.send http_verb, url, params
+    def grant(token, allow_vaulting)
+      raise ArgumentError if token.nil? || token.to_s.strip == ""
+
+      _do_create(
+        "/payment_methods/grant",
+        :payment_method => {
+          :shared_payment_method_token => token,
+          :allow_vaulting => allow_vaulting
+        }
+      )
+    rescue NotFoundError
+      raise NotFoundError, "payment method with token #{token.inspect} not found"
+    end
+
+    def revoke(token)
+      raise ArgumentError if token.nil? || token.to_s.strip == ""
+
+      _do_create(
+        "/payment_methods/revoke",
+        :payment_method => {
+          :shared_payment_method_token => token
+        }
+      )
+    rescue NotFoundError
+      raise NotFoundError, "payment method with token #{token.inspect} not found"
+    end
+
+    def _do_update(http_verb, path, params) # :nodoc:
+      response = @config.http.send(http_verb, "#{@config.base_merchant_path}#{path}", params)
       if response[:credit_card]
         SuccessfulResult.new(:payment_method => CreditCard._new(@gateway, response[:credit_card]))
       elsif response[:paypal_account]
@@ -83,7 +124,7 @@ module Braintree
 
     def self._signature(type) # :nodoc:
       billing_address_params = AddressGateway._shared_signature
-      options = [:make_default, :verification_merchant_account_id, :verify_card, :venmo_sdk_session]
+      options = [:make_default, :verification_merchant_account_id, :verify_card, :venmo_sdk_session, :verification_amount]
       signature = [
         :billing_address_id, :cardholder_name, :cvv, :device_session_id, :expiration_date,
         :expiration_month, :expiration_year, :number, :token, :venmo_sdk_payment_method_code,

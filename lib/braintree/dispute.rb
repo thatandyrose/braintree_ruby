@@ -10,6 +10,9 @@ module Braintree
     attr_reader :currency_iso_code
     attr_reader :id
     attr_reader :transaction_details
+    attr_reader :kind
+    attr_reader :date_opened
+    attr_reader :date_won
 
     module Status
       Open = "open"
@@ -31,6 +34,12 @@ module Braintree
       Retrieval = "retrieval"
     end
 
+    module Kind
+      Chargeback = "chargeback"
+      PreArbitration = "pre_arbitration"
+      Retrieval = "retrieval"
+    end
+
     class << self
       protected :new
       def _new(*args) # :nodoc:
@@ -44,6 +53,8 @@ module Braintree
       @reply_by_date = Date.parse(reply_by_date) unless reply_by_date.nil?
       @amount = Util.to_big_decimal(amount)
       @transaction_details = TransactionDetails.new(@transaction)
+      @date_opened = Date.parse(date_opened) unless date_opened.nil?
+      @date_won = Date.parse(date_won) unless date_won.nil?
     end
   end
 end

@@ -3,6 +3,7 @@ module Braintree
     def initialize(gateway)
       @gateway = gateway
       @config = gateway.config
+      @config.assert_has_access_token_or_keys
     end
 
     def sample_notification(kind, id)
@@ -26,6 +27,8 @@ module Braintree
 
     def _subject_sample_xml(kind, id)
       case kind
+      when Braintree::WebhookNotification::Kind::Check
+        _check
       when Braintree::WebhookNotification::Kind::DisputeOpened
         _dispute_opened_sample_xml(id)
       when Braintree::WebhookNotification::Kind::DisputeLost
@@ -48,9 +51,39 @@ module Braintree
         _disbursement_exception_sample_xml(id)
       when Braintree::WebhookNotification::Kind::Disbursement
         _disbursement_sample_xml(id)
+      when Braintree::WebhookNotification::Kind::SubscriptionChargedSuccessfully
+        _subscription_charged_successfully(id)
+      when Braintree::WebhookNotification::Kind::AccountUpdaterDailyReport
+        _account_updater_daily_report_sample_xml(id)
       else
         _subscription_sample_xml(id)
       end
+    end
+
+    def _check
+
+      <<-XML
+        <check type="boolean">true</check>
+      XML
+    end
+
+    def _subscription_charged_successfully(id)
+
+      <<-XML
+        <subscription>
+          <id>#{id}</id>
+          <transactions type="array">
+            <transaction>
+              <status>submitted_for_settlement</status>
+              <amount>49.99</amount>
+            </transaction>
+          </transactions>
+          <add_ons type="array">
+          </add_ons>
+          <discounts type="array">
+          </discounts>
+        </subscription>
+      XML
     end
 
     def _subscription_sample_xml(id)
@@ -163,6 +196,7 @@ module Braintree
           <currency-iso-code>USD</currency-iso-code>
           <received-date type="date">2014-03-01</received-date>
           <reply-by-date type="date">2014-03-21</reply-by-date>
+          <kind>chargeback</kind>
           <status>open</status>
           <reason>fraud</reason>
           <id>#{id}</id>
@@ -170,6 +204,7 @@ module Braintree
             <id>#{id}</id>
             <amount>250.00</amount>
           </transaction>
+          <date-opened type=\"date\">2014-03-21</date-opened>
         </dispute>
       XML
     end
@@ -182,6 +217,7 @@ module Braintree
           <currency-iso-code>USD</currency-iso-code>
           <received-date type="date">2014-03-01</received-date>
           <reply-by-date type="date">2014-03-21</reply-by-date>
+          <kind>chargeback</kind>
           <status>lost</status>
           <reason>fraud</reason>
           <id>#{id}</id>
@@ -189,6 +225,7 @@ module Braintree
             <id>#{id}</id>
             <amount>250.00</amount>
           </transaction>
+          <date-opened type=\"date\">2014-03-21</date-opened>
         </dispute>
       XML
     end
@@ -201,6 +238,7 @@ module Braintree
           <currency-iso-code>USD</currency-iso-code>
           <received-date type="date">2014-03-01</received-date>
           <reply-by-date type="date">2014-03-21</reply-by-date>
+          <kind>chargeback</kind>
           <status>won</status>
           <reason>fraud</reason>
           <id>#{id}</id>
@@ -208,6 +246,8 @@ module Braintree
             <id>#{id}</id>
             <amount>250.00</amount>
           </transaction>
+          <date-opened type=\"date\">2014-03-21</date-opened>
+          <date-won type=\"date\">2014-03-22</date-won>
         </dispute>
       XML
     end
@@ -259,6 +299,16 @@ module Braintree
           <exception-message nil="true"/>
           <follow-up-action nil="true"/>
         </disbursement>
+      XML
+    end
+
+    def _account_updater_daily_report_sample_xml(id)
+
+      <<-XML
+        <account-updater-daily-report>
+          <report-date type="date">2016-01-14</report-date>
+          <report-url>link-to-csv-report</report-url>
+        </account-updater-daily-report>
       XML
     end
   end

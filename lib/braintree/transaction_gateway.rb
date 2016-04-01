@@ -3,6 +3,7 @@ module Braintree
     def initialize(gateway)
       @gateway = gateway
       @config = gateway.config
+      @config.assert_has_access_token_or_keys
     end
 
     def create(attributes)
@@ -12,13 +13,13 @@ module Braintree
 
     def cancel_release(transaction_id)
       raise ArgumentError, "transaction_id is invalid" unless transaction_id =~ /\A[0-9a-z]+\z/
-      response = @config.http.put "/transactions/#{transaction_id}/cancel_release"
+      response = @config.http.put("#{@config.base_merchant_path}/transactions/#{transaction_id}/cancel_release")
       _handle_transaction_response(response)
     end
 
     def hold_in_escrow(transaction_id)
       raise ArgumentError, "transaction_id is invalid" unless transaction_id =~ /\A[0-9a-z]+\z/
-      response = @config.http.put "/transactions/#{transaction_id}/hold_in_escrow"
+      response = @config.http.put("#{@config.base_merchant_path}/transactions/#{transaction_id}/hold_in_escrow")
       _handle_transaction_response(response)
     end
 
@@ -54,14 +55,14 @@ module Braintree
 
     def find(id)
       raise ArgumentError if id.nil? || id.strip.to_s == ""
-      response = @config.http.get "/transactions/#{id}"
+      response = @config.http.get("#{@config.base_merchant_path}/transactions/#{id}")
       Transaction._new(@gateway, response[:transaction])
     rescue NotFoundError
       raise NotFoundError, "transaction with id #{id.inspect} not found"
     end
 
     def refund(transaction_id, amount = nil)
-      response = @config.http.post "/transactions/#{transaction_id}/refund", :transaction => {:amount => amount}
+      response = @config.http.post("#{@config.base_merchant_path}/transactions/#{transaction_id}/refund", :transaction => {:amount => amount})
       _handle_transaction_response(response)
     end
 
@@ -82,7 +83,7 @@ module Braintree
       search = TransactionSearch.new
       block.call(search) if block
 
-      response = @config.http.post "/transactions/advanced_search_ids", {:search => search.to_hash}
+      response = @config.http.post("#{@config.base_merchant_path}/transactions/advanced_search_ids", {:search => search.to_hash})
 
       if response.has_key?(:search_results)
         ResourceCollection.new(response) { |ids| _fetch_transactions(search, ids) }
@@ -93,18 +94,28 @@ module Braintree
 
     def release_from_escrow(transaction_id)
       raise ArgumentError, "transaction_id is invalid" unless transaction_id =~ /\A[0-9a-z]+\z/
-      response = @config.http.put "/transactions/#{transaction_id}/release_from_escrow"
+      response = @config.http.put("#{@config.base_merchant_path}/transactions/#{transaction_id}/release_from_escrow")
       _handle_transaction_response(response)
     end
 
-    def submit_for_settlement(transaction_id, amount = nil)
+    def submit_for_settlement(transaction_id, amount = nil, options = {})
       raise ArgumentError, "transaction_id is invalid" unless transaction_id =~ /\A[0-9a-z]+\z/
-      response = @config.http.put "/transactions/#{transaction_id}/submit_for_settlement", :transaction => {:amount => amount}
+      Util.verify_keys(TransactionGateway._submit_for_settlement_signature, options)
+      transaction_params = {:amount => amount}.merge(options)
+      response = @config.http.put("#{@config.base_merchant_path}/transactions/#{transaction_id}/submit_for_settlement", :transaction => transaction_params)
+      _handle_transaction_response(response)
+    end
+
+    def submit_for_partial_settlement(authorized_transaction_id, amount = nil, options = {})
+      raise ArgumentError, "authorized_transaction_id is invalid" unless authorized_transaction_id =~ /\A[0-9a-z]+\z/
+      Util.verify_keys(TransactionGateway._submit_for_settlement_signature, options)
+      transaction_params = {:amount => amount}.merge(options)
+      response = @config.http.post("#{@config.base_merchant_path}/transactions/#{authorized_transaction_id}/submit_for_partial_settlement", :transaction => transaction_params)
       _handle_transaction_response(response)
     end
 
     def void(transaction_id)
-      response = @config.http.put "/transactions/#{transaction_id}/void"
+      response = @config.http.put("#{@config.base_merchant_path}/transactions/#{transaction_id}/void")
       _handle_transaction_response(response)
     end
 
@@ -119,6 +130,7 @@ module Braintree
         :purchase_order_number, :recurring, :shipping_address_id, :type, :tax_amount, :tax_exempt,
         :venmo_sdk_payment_method_code, :device_session_id, :service_fee_amount, :device_data, :fraud_merchant_id,
         :billing_address_id, :payment_method_nonce, :three_d_secure_token,
+        :shared_payment_method_token, :shared_billing_address_id, :shared_customer_id, :shared_shipping_address_id,
         {:credit_card => [:token, :cardholder_name, :cvv, :expiration_date, :expiration_month, :expiration_year, :number]},
         {:customer => [:id, :company, :email, :fax, :first_name, :last_name, :phone, :website]},
         {
@@ -136,24 +148,36 @@ module Braintree
           :store_shipping_address_in_vault,
           :venmo_sdk_session,
           :payee_email,
-          {:paypal => [:custom_field, :payee_email]},
-          {:three_d_secure => [:required]}]
+          :skip_avs,
+          :skip_cvv,
+          {:paypal => [:custom_field, :payee_email, :description, {:supplementary_data => :_any_key_}]},
+          {:three_d_secure => [:required]},
+          {:amex_rewards => [:request_id, :points, :currency_amount, :currency_iso_code]}]
         },
         {:custom_fields => :_any_key_},
         {:descriptor => [:name, :phone, :url]},
         {:paypal_account => [:email, :token, :paypal_data, :payee_email]},
-        {:industry => [:industry_type, {:data => [:folio_number, :check_in_date, :check_out_date, :travel_package, :lodging_check_in_date, :lodging_check_out_date, :departure_date, :lodging_name, :room_rate]}]}
+        {:industry => [:industry_type, {:data => [:folio_number, :check_in_date, :check_out_date, :travel_package, :lodging_check_in_date, :lodging_check_out_date, :departure_date, :lodging_name, :room_rate]}]},
+        {:apple_pay_card => [:number, :cardholder_name, :cryptogram, :expiration_month, :expiration_year]},
+        {:android_pay_card => [:number, :cryptogram, :google_transaction_id, :expiration_month, :expiration_year, :source_card_type, :source_card_last_four, :eci_indicator]}
       ]
     end
 
-    def _do_create(url, params=nil) # :nodoc:
-      response = @config.http.post url, params
+    def self._submit_for_settlement_signature # :nodoc:
+      [
+        :order_id,
+        {:descriptor => [:name, :phone, :url]},
+      ]
+    end
+
+    def _do_create(path, params=nil) # :nodoc:
+      response = @config.http.post("#{@config.base_merchant_path}#{path}", params)
       _handle_transaction_response(response)
     end
 
     def _fetch_transactions(search, ids) # :nodoc:
       search.ids.in ids
-      response = @config.http.post "/transactions/advanced_search", {:search => search.to_hash}
+      response = @config.http.post("#{@config.base_merchant_path}/transactions/advanced_search", {:search => search.to_hash})
       attributes = response[:credit_card_transactions]
       Util.extract_attribute_as_array(attributes, :transaction).map { |attrs| Transaction._new(@gateway, attrs) }
     end

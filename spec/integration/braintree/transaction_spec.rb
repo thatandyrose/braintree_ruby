@@ -266,6 +266,43 @@ describe Braintree::Transaction do
       result.transaction.credit_card_details.customer_location.should == "US"
     end
 
+    it "returns a successful result using an access token" do
+      oauth_gateway = Braintree::Gateway.new(
+        :client_id => "client_id$development$integration_client_id",
+        :client_secret => "client_secret$development$integration_client_secret",
+        :logger => Logger.new("/dev/null")
+      )
+      access_token = Braintree::OAuthTestHelper.create_token(oauth_gateway, {
+        :merchant_public_id => "integration_merchant_id",
+        :scope => "read_write"
+      }).credentials.access_token
+
+      gateway = Braintree::Gateway.new(
+        :access_token => access_token,
+        :logger => Logger.new("/dev/null")
+      )
+
+      result = gateway.transaction.create(
+        :type => "sale",
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "05/2009"
+        }
+      )
+
+      result.success?.should == true
+      result.transaction.id.should =~ /^\w{6}$/
+      result.transaction.type.should == "sale"
+      result.transaction.amount.should == BigDecimal.new(Braintree::Test::TransactionAmounts::Authorize)
+      result.transaction.processor_authorization_code.should_not be_nil
+      result.transaction.voice_referral_number.should be_nil
+      result.transaction.credit_card_details.bin.should == Braintree::Test::CreditCardNumbers::Visa[0, 6]
+      result.transaction.credit_card_details.last_4.should == Braintree::Test::CreditCardNumbers::Visa[-4..-1]
+      result.transaction.credit_card_details.expiration_date.should == "05/2009"
+      result.transaction.credit_card_details.customer_location.should == "US"
+    end
+
     it "accepts additional security parameters: device_session_id and fraud_merchant_id" do
       result = Braintree::Transaction.create(
         :type => "sale",
@@ -459,6 +496,35 @@ describe Braintree::Transaction do
           Braintree::Configuration.public_key = old_public_key
           Braintree::Configuration.private_key = old_private_key
         end
+      end
+
+      it "exposes the application incomplete gateway rejection reason" do
+        gateway = Braintree::Gateway.new(
+          :client_id => "client_id$development$integration_client_id",
+          :client_secret => "client_secret$development$integration_client_secret",
+          :logger => Logger.new("/dev/null")
+        )
+        result = gateway.merchant.create(
+          :email => "name@email.com",
+          :country_code_alpha3 => "USA",
+          :payment_methods => ["credit_card", "paypal"]
+        )
+
+        gateway = Braintree::Gateway.new(
+          :access_token => result.credentials.access_token,
+          :logger => Logger.new("/dev/null")
+        )
+
+        result = gateway.transaction.create(
+          :type => "sale",
+          :amount => "4000.00",
+          :credit_card => {
+            :number => Braintree::Test::CreditCardNumbers::Visa,
+            :expiration_date => "05/2020"
+          }
+        )
+        result.success?.should == false
+        result.transaction.gateway_rejection_reason.should == Braintree::Transaction::GatewayRejectionReason::ApplicationIncomplete
       end
 
       it "exposes the avs gateway rejection reason" do
@@ -1265,9 +1331,94 @@ describe Braintree::Transaction do
         apple_pay_details.should_not be_nil
         apple_pay_details.card_type.should == Braintree::ApplePayCard::CardType::Visa
         apple_pay_details.payment_instrument_name.should == "Visa 8886"
+        apple_pay_details.source_description.should == "Visa 8886"
         apple_pay_details.expiration_month.to_i.should > 0
         apple_pay_details.expiration_year.to_i.should > 0
         apple_pay_details.cardholder_name.should_not be_nil
+      end
+
+      it "can create a transaction with a fake android pay proxy card nonce" do
+        customer = Braintree::Customer.create!
+        result = Braintree::Transaction.create(
+          :type => "sale",
+          :amount => Braintree::Test::TransactionAmounts::Authorize,
+          :payment_method_nonce => Braintree::Test::Nonce::AndroidPayDiscover
+        )
+        result.success?.should == true
+        result.transaction.should_not be_nil
+        android_pay_details = result.transaction.android_pay_details
+        android_pay_details.should_not be_nil
+        android_pay_details.card_type.should == Braintree::CreditCard::CardType::Discover
+        android_pay_details.virtual_card_type.should == Braintree::CreditCard::CardType::Discover
+        android_pay_details.last_4.should == "1117"
+        android_pay_details.virtual_card_last_4.should == "1117"
+        android_pay_details.source_description.should == "Visa 1111"
+        android_pay_details.expiration_month.to_i.should > 0
+        android_pay_details.expiration_year.to_i.should > 0
+        android_pay_details.google_transaction_id.should == "google_transaction_id"
+      end
+
+      it "can create a transaction with a fake android pay network token nonce" do
+        customer = Braintree::Customer.create!
+        result = Braintree::Transaction.create(
+          :type => "sale",
+          :amount => Braintree::Test::TransactionAmounts::Authorize,
+          :payment_method_nonce => Braintree::Test::Nonce::AndroidPayMasterCard
+        )
+        result.success?.should == true
+        result.transaction.should_not be_nil
+        android_pay_details = result.transaction.android_pay_details
+        android_pay_details.should_not be_nil
+        android_pay_details.card_type.should == Braintree::CreditCard::CardType::MasterCard
+        android_pay_details.virtual_card_type.should == Braintree::CreditCard::CardType::MasterCard
+        android_pay_details.last_4.should == "4444"
+        android_pay_details.virtual_card_last_4.should == "4444"
+        android_pay_details.source_description.should == "MasterCard 4444"
+        android_pay_details.expiration_month.to_i.should > 0
+        android_pay_details.expiration_year.to_i.should > 0
+        android_pay_details.google_transaction_id.should == "google_transaction_id"
+      end
+
+      it "can create a transaction with a fake amex express checkout card nonce" do
+        result = Braintree::Transaction.create(
+          :type => "sale",
+          :merchant_account_id => SpecHelper::FakeAmexDirectMerchantAccountId,
+          :amount => Braintree::Test::TransactionAmounts::Authorize,
+          :payment_method_nonce => Braintree::Test::Nonce::AmexExpressCheckout,
+          :options => {:store_in_vault => true}
+        )
+        result.success?.should == true
+        result.transaction.should_not be_nil
+        checkout_details = result.transaction.amex_express_checkout_details
+        checkout_details.should_not be_nil
+        checkout_details.card_type.should == "American Express"
+        checkout_details.token.should respond_to(:to_str)
+        checkout_details.bin.should =~ /\A\d{6}\z/
+        checkout_details.expiration_month.should =~ /\A\d{2}\z/
+        checkout_details.expiration_year.should =~ /\A\d{4}\z/
+        checkout_details.card_member_number.should =~ /\A\d{4}\z/
+        checkout_details.card_member_expiry_date.should =~ /\A\d{2}\/\d{2}\z/
+        checkout_details.image_url.should include(".png")
+        checkout_details.source_description.should =~ /\AAmEx \d{4}\z/
+      end
+
+      it "can create a transaction with a fake venmo account nonce" do
+        result = Braintree::Transaction.create(
+          :type => "sale",
+          :merchant_account_id => SpecHelper::FakeVenmoAccountMerchantAccountId,
+          :amount => Braintree::Test::TransactionAmounts::Authorize,
+          :payment_method_nonce => Braintree::Test::Nonce::VenmoAccount,
+          :options => {:store_in_vault => true}
+        )
+        result.should be_success
+
+        venmo_account_details = result.transaction.venmo_account_details
+        venmo_account_details.should be_a(Braintree::Transaction::VenmoAccountDetails)
+        venmo_account_details.token.should respond_to(:to_str)
+        venmo_account_details.username.should == "venmojoe"
+        venmo_account_details.venmo_user_id.should == "Venmo-Joe-1"
+        venmo_account_details.image_url.should include(".png")
+        venmo_account_details.source_description.should == "Venmo Account: venmojoe"
       end
 
       it "can create a transaction with an unknown nonce" do
@@ -1380,6 +1531,59 @@ describe Braintree::Transaction do
         result.transaction.paypal_details.should_not be_nil
         result.transaction.paypal_details.debug_id.should_not be_nil
         result.transaction.paypal_details.custom_field.should == "Additional info"
+      end
+
+      it "can create a transaction with a paypal description" do
+        customer = Braintree::Customer.create!
+        nonce = nonce_for_new_payment_method(
+          :paypal_account => {
+            :consent_code => "PAYPAL_CONSENT_CODE",
+          }
+        )
+        nonce.should_not be_nil
+
+        result = Braintree::Transaction.create(
+          :type => "sale",
+          :amount => Braintree::Test::TransactionAmounts::Authorize,
+          :payment_method_nonce => nonce,
+          :options => {
+            :paypal => {
+              :description => "A great product"
+            }
+          }
+        )
+
+        result.success?.should == true
+        result.transaction.paypal_details.should_not be_nil
+        result.transaction.paypal_details.debug_id.should_not be_nil
+        result.transaction.paypal_details.description.should == "A great product"
+      end
+
+      it "can create a transaction with STC supplementary data" do
+        customer = Braintree::Customer.create!
+        nonce = nonce_for_new_payment_method(
+          :paypal_account => {
+            :consent_code => "PAYPAL_CONSENT_CODE",
+          }
+        )
+        nonce.should_not be_nil
+
+        result = Braintree::Transaction.create(
+          :type => "sale",
+          :amount => Braintree::Test::TransactionAmounts::Authorize,
+          :payment_method_nonce => nonce,
+          :options => {
+            :paypal => {
+              :supplementary_data => {
+                :key1 => "value1",
+                :key2 => "value2",
+              }
+            }
+          }
+        )
+
+        # note - supplementary data is not returned in response
+        result.success?.should == true
       end
     end
 
@@ -2170,6 +2374,220 @@ describe Braintree::Transaction do
       result.params.should == {:transaction => {:type => 'sale', :amount => nil, :credit_card => {:expiration_date => "05/2009"}}}
       result.errors.for(:transaction).on(:amount)[0].code.should == Braintree::ErrorCodes::Transaction::AmountIsRequired
     end
+
+    it "works with Apple Pay params" do
+      params = {
+        :amount => "3.12",
+        :apple_pay_card => {
+          :number => "370295001292109",
+          :cardholder_name => "JANE SMITH",
+          :cryptogram => "AAAAAAAA/COBt84dnIEcwAA3gAAGhgEDoLABAAhAgAABAAAALnNCLw==",
+          :expiration_month => "10",
+          :expiration_year => "14",
+        }
+      }
+      result = Braintree::Transaction.sale(params)
+      result.success?.should == true
+      result.transaction.status.should == Braintree::Transaction::Status::Authorized
+    end
+
+    context "Android Pay params" do
+      it "works with full params" do
+        params = {
+          :amount => "3.12",
+          :android_pay_card => {
+            :number => "4012888888881881",
+            :cryptogram => "AAAAAAAA/COBt84dnIEcwAA3gAAGhgEDoLABAAhAgAABAAAALnNCLw==",
+            :google_transaction_id => "25469d622c1dd37cb1a403c6d438e850",
+            :expiration_month => "10",
+            :expiration_year => "14",
+            :source_card_type => "Visa",
+            :source_card_last_four => "1111",
+            :eci_indicator => "05",
+          }
+        }
+        result = Braintree::Transaction.sale(params)
+        result.success?.should == true
+        result.transaction.status.should == Braintree::Transaction::Status::Authorized
+      end
+
+      it "works with only number, cryptogram, expiration and transaction ID (network tokenized card)" do
+        params = {
+          :amount => "3.12",
+          :android_pay_card => {
+            :number => "4012888888881881",
+            :cryptogram => "AAAAAAAA/COBt84dnIEcwAA3gAAGhgEDoLABAAhAgAABAAAALnNCLw==",
+            :google_transaction_id => "25469d622c1dd37cb1a403c6d438e850",
+            :expiration_month => "10",
+            :expiration_year => "14",
+          }
+        }
+        result = Braintree::Transaction.sale(params)
+        result.success?.should == true
+        result.transaction.status.should == Braintree::Transaction::Status::Authorized
+      end
+
+      it "works with only number, expiration and transaction ID (non-tokenized card)" do
+        params = {
+          :amount => "3.12",
+          :android_pay_card => {
+            :number => "4012888888881881",
+            :google_transaction_id => "25469d622c1dd37cb1a403c6d438e850",
+            :expiration_month => "10",
+            :expiration_year => "14",
+          }
+        }
+        result = Braintree::Transaction.sale(params)
+        result.success?.should == true
+        result.transaction.status.should == Braintree::Transaction::Status::Authorized
+      end
+    end
+
+    context "Amex Pay with Points" do
+      context "transaction creation" do
+        it "succeeds when submit_for_settlement is true" do
+          result = Braintree::Transaction.sale(
+            :amount => Braintree::Test::TransactionAmounts::Authorize,
+            :merchant_account_id => SpecHelper::FakeAmexDirectMerchantAccountId,
+            :credit_card => {
+              :number => Braintree::Test::CreditCardNumbers::AmexPayWithPoints::Success,
+              :expiration_date => "05/2009"
+            },
+            :options => {
+              :submit_for_settlement => true,
+              :amex_rewards => {
+                :request_id => "ABC123",
+                :points => "1000",
+                :currency_amount => "10.00",
+                :currency_iso_code => "USD"
+              }
+            }
+          )
+          result.success?.should == true
+          result.transaction.status.should == Braintree::Transaction::Status::SubmittedForSettlement
+        end
+
+        it "succeeds even if the card is ineligible" do
+          result = Braintree::Transaction.sale(
+            :amount => Braintree::Test::TransactionAmounts::Authorize,
+            :merchant_account_id => SpecHelper::FakeAmexDirectMerchantAccountId,
+            :credit_card => {
+              :number => Braintree::Test::CreditCardNumbers::AmexPayWithPoints::IneligibleCard,
+              :expiration_date => "05/2009"
+            },
+            :options => {
+              :submit_for_settlement => true,
+              :amex_rewards => {
+                :request_id => "ABC123",
+                :points => "1000",
+                :currency_amount => "10.00",
+                :currency_iso_code => "USD"
+              }
+            }
+          )
+          result.success?.should == true
+          result.transaction.status.should == Braintree::Transaction::Status::SubmittedForSettlement
+        end
+
+        it "succeeds even if the card's balance is insufficient" do
+          result = Braintree::Transaction.sale(
+            :amount => Braintree::Test::TransactionAmounts::Authorize,
+            :merchant_account_id => SpecHelper::FakeAmexDirectMerchantAccountId,
+            :credit_card => {
+              :number => Braintree::Test::CreditCardNumbers::AmexPayWithPoints::InsufficientPoints,
+              :expiration_date => "05/2009"
+            },
+            :options => {
+              :submit_for_settlement => true,
+              :amex_rewards => {
+                :request_id => "ABC123",
+                :points => "1000",
+                :currency_amount => "10.00",
+                :currency_iso_code => "USD"
+              }
+            }
+          )
+          result.success?.should == true
+          result.transaction.status.should == Braintree::Transaction::Status::SubmittedForSettlement
+        end
+      end
+
+      context "submit for settlement" do
+        it "succeeds" do
+          result = Braintree::Transaction.sale(
+            :amount => Braintree::Test::TransactionAmounts::Authorize,
+            :merchant_account_id => SpecHelper::FakeAmexDirectMerchantAccountId,
+            :credit_card => {
+              :number => Braintree::Test::CreditCardNumbers::AmexPayWithPoints::Success,
+              :expiration_date => "05/2009"
+            },
+            :options => {
+              :amex_rewards => {
+                :request_id => "ABC123",
+                :points => "1000",
+                :currency_amount => "10.00",
+                :currency_iso_code => "USD"
+              }
+            }
+          )
+          result.success?.should == true
+
+          result = Braintree::Transaction.submit_for_settlement(result.transaction.id)
+          result.success?.should == true
+          result.transaction.status.should == Braintree::Transaction::Status::SubmittedForSettlement
+        end
+
+        it "succeeds even if the card is ineligible" do
+          result = Braintree::Transaction.sale(
+            :amount => Braintree::Test::TransactionAmounts::Authorize,
+            :merchant_account_id => SpecHelper::FakeAmexDirectMerchantAccountId,
+            :credit_card => {
+              :number => Braintree::Test::CreditCardNumbers::AmexPayWithPoints::IneligibleCard,
+              :expiration_date => "05/2009"
+            },
+            :options => {
+              :amex_rewards => {
+                :request_id => "ABC123",
+                :points => "1000",
+                :currency_amount => "10.00",
+                :currency_iso_code => "USD"
+              }
+            }
+          )
+          result.success?.should == true
+          result.transaction.status.should == Braintree::Transaction::Status::Authorized
+
+          result = Braintree::Transaction.submit_for_settlement(result.transaction.id)
+          result.success?.should == true
+          result.transaction.status.should == Braintree::Transaction::Status::SubmittedForSettlement
+        end
+
+        it "succeeds even if the card's balance is insufficient" do
+          result = Braintree::Transaction.sale(
+            :amount => Braintree::Test::TransactionAmounts::Authorize,
+            :merchant_account_id => SpecHelper::FakeAmexDirectMerchantAccountId,
+            :credit_card => {
+              :number => Braintree::Test::CreditCardNumbers::AmexPayWithPoints::IneligibleCard,
+              :expiration_date => "05/2009"
+            },
+            :options => {
+              :amex_rewards => {
+                :request_id => "ABC123",
+                :points => "1000",
+                :currency_amount => "10.00",
+                :currency_iso_code => "USD"
+              }
+            }
+          )
+          result.success?.should == true
+          result.transaction.status.should == Braintree::Transaction::Status::Authorized
+
+          result = Braintree::Transaction.submit_for_settlement(result.transaction.id)
+          result.success?.should == true
+          result.transaction.status.should == Braintree::Transaction::Status::SubmittedForSettlement
+        end
+      end
+    end
   end
 
   describe "self.sale!" do
@@ -2231,6 +2649,62 @@ describe Braintree::Transaction do
       result.transaction.updated_at.between?(Time.now - 60, Time.now).should == true
     end
 
+    it "returns a successful result if order_id is passed in as an options hash" do
+      transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "06/2009"
+        }
+      )
+      options = { :order_id => "ABC123" }
+      result = Braintree::Transaction.submit_for_settlement(transaction.id, nil, options)
+      result.success?.should == true
+      result.transaction.order_id.should == "ABC123"
+      result.transaction.status.should == Braintree::Transaction::Status::SubmittedForSettlement
+    end
+
+    it "returns a successful result if descritpors are passed in as an options hash" do
+      transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "06/2009"
+        }
+      )
+
+      options = {
+          :descriptor => {
+            :name => '123*123456789012345678',
+            :phone => '3334445555',
+            :url => "ebay.com"
+          }
+      }
+
+      result = Braintree::Transaction.submit_for_settlement(transaction.id, nil, options)
+      result.success?.should == true
+      result.transaction.status.should == Braintree::Transaction::Status::SubmittedForSettlement
+      result.transaction.descriptor.name.should == '123*123456789012345678'
+      result.transaction.descriptor.phone.should == '3334445555'
+      result.transaction.descriptor.url.should == 'ebay.com'
+    end
+
+    it "raises an error if an invalid option is passed in" do
+      transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "06/2009"
+        }
+      )
+
+      options = { :order_id => "ABC123", :invalid_option => "i'm invalid" }
+
+      expect do
+        Braintree::Transaction.submit_for_settlement(transaction.id, nil, options)
+      end.to raise_error(ArgumentError)
+    end
+
     it "returns an error result if settlement is too large" do
       transaction = Braintree::Transaction.sale!(
         :amount => Braintree::Test::TransactionAmounts::Authorize,
@@ -2287,9 +2761,11 @@ describe Braintree::Transaction do
           :expiration_date => "06/2009"
         }
       )
-      transaction = Braintree::Transaction.submit_for_settlement!(original_transaction.id)
+      options = { :order_id => "ABC123" }
+      transaction = Braintree::Transaction.submit_for_settlement!(original_transaction.id, "0.01", options)
       transaction.status.should == Braintree::Transaction::Status::SubmittedForSettlement
       transaction.id.should == original_transaction.id
+      transaction.order_id.should == options[:order_id]
     end
 
     it "raises a ValidationsFailed if unsuccessful" do
@@ -2303,6 +2779,215 @@ describe Braintree::Transaction do
       transaction.amount.should == BigDecimal.new("1000.00")
       expect do
         Braintree::Transaction.submit_for_settlement!(transaction.id, "1000.01")
+      end.to raise_error(Braintree::ValidationsFailed)
+    end
+  end
+
+
+  describe "submit for partial settlement" do
+    it "successfully submits multiple times for partial settlement" do
+      authorized_transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :merchant_account_id => SpecHelper::DefaultMerchantAccountId,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "06/2009"
+        }
+      )
+
+      result = Braintree::Transaction.submit_for_partial_settlement(authorized_transaction.id, 100)
+      result.success?.should == true
+      partial_settlement_transaction1 = result.transaction
+      partial_settlement_transaction1.amount.should == 100
+      partial_settlement_transaction1.type.should == Braintree::Transaction::Type::Sale
+      partial_settlement_transaction1.status.should == Braintree::Transaction::Status::SubmittedForSettlement
+      partial_settlement_transaction1.authorized_transaction_id.should == authorized_transaction.id
+
+      refreshed_authorized_transaction = Braintree::Transaction.find(authorized_transaction.id)
+      refreshed_authorized_transaction.status.should == Braintree::Transaction::Status::SettlementPending
+      refreshed_authorized_transaction.partial_settlement_transaction_ids.should == [partial_settlement_transaction1.id]
+
+      result = Braintree::Transaction.submit_for_partial_settlement(authorized_transaction.id, 800)
+      result.success?.should == true
+      partial_settlement_transaction2 = result.transaction
+      partial_settlement_transaction2.amount.should == 800
+      partial_settlement_transaction2.type.should == Braintree::Transaction::Type::Sale
+      partial_settlement_transaction2.status.should == Braintree::Transaction::Status::SubmittedForSettlement
+      partial_settlement_transaction2.authorized_transaction_id.should == authorized_transaction.id
+
+      refreshed_authorized_transaction = Braintree::Transaction.find(authorized_transaction.id)
+      refreshed_authorized_transaction.status.should == Braintree::Transaction::Status::SettlementPending
+      refreshed_authorized_transaction.partial_settlement_transaction_ids.sort.should == [partial_settlement_transaction1.id, partial_settlement_transaction2.id].sort
+    end
+
+    it "allows partial settlement to be submitted with order_id" do
+      authorized_transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :merchant_account_id => SpecHelper::DefaultMerchantAccountId,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "05/2009"
+        }
+      )
+
+      result = Braintree::Transaction.submit_for_partial_settlement(authorized_transaction.id, 100, :order_id => 1234)
+      result.success?.should == true
+      partial_settlement_transaction = result.transaction
+      partial_settlement_transaction.order_id.should == "1234"
+    end
+
+    it "returns an error with an order_id that's too long" do
+      authorized_transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :merchant_account_id => SpecHelper::DefaultMerchantAccountId,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "05/2009"
+        }
+      )
+
+      result = Braintree::Transaction.submit_for_partial_settlement(authorized_transaction.id, 100, :order_id => "1"*256)
+      result.success?.should == false
+      result.errors.for(:transaction).on(:order_id)[0].code.should == Braintree::ErrorCodes::Transaction::OrderIdIsTooLong
+    end
+
+    it "allows partial settlement to be submitted with descriptors" do
+      authorized_transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :merchant_account_id => SpecHelper::DefaultMerchantAccountId,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "05/2009"
+        }
+      )
+
+      result = Braintree::Transaction.submit_for_partial_settlement(
+        authorized_transaction.id,
+        100,
+        :descriptor => { :name => "123*123456789012345678", :phone => "5555551234", :url => "url.com" }
+      )
+      result.success?.should == true
+      partial_settlement_transaction = result.transaction
+      partial_settlement_transaction.descriptor.name.should == "123*123456789012345678"
+      partial_settlement_transaction.descriptor.phone.should == "5555551234"
+      partial_settlement_transaction.descriptor.url.should == "url.com"
+    end
+
+    it "returns an error with a descriptor in an invalid format" do
+      authorized_transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :merchant_account_id => SpecHelper::DefaultMerchantAccountId,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "05/2009"
+        }
+      )
+
+      result = Braintree::Transaction.submit_for_partial_settlement(
+        authorized_transaction.id,
+        100,
+        :descriptor => {
+          :name => "invalid_format",
+          :phone => '%bad4445555',
+          :url => '12345678901234'
+        }
+      )
+      result.success?.should == false
+      result.errors.for(:transaction).for(:descriptor).on(:name)[0].code.should == Braintree::ErrorCodes::Descriptor::NameFormatIsInvalid
+      result.errors.for(:transaction).for(:descriptor).on(:phone)[0].code.should == Braintree::ErrorCodes::Descriptor::PhoneFormatIsInvalid
+      result.errors.for(:transaction).for(:descriptor).on(:url)[0].code.should == Braintree::ErrorCodes::Descriptor::UrlFormatIsInvalid
+    end
+
+    it "returns an error with an unsupported processor" do
+      authorized_transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :merchant_account_id => SpecHelper::FakeAmexDirectMerchantAccountId,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::AmexPayWithPoints::Success,
+          :expiration_date => "05/2009"
+        }
+      )
+
+      result = Braintree::Transaction.submit_for_partial_settlement(authorized_transaction.id, 100)
+      result.success?.should == false
+      result.errors.for(:transaction).on(:base)[0].code.should == Braintree::ErrorCodes::Transaction::ProcessorDoesNotSupportPartialSettlement
+    end
+
+    it "returns an error with an invalid payment instrument type" do
+      authorized_transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :merchant_account_id => SpecHelper::DefaultMerchantAccountId,
+        :payment_method_nonce => Braintree::Test::Nonce::ApplePayAmEx
+      )
+
+      result = Braintree::Transaction.submit_for_partial_settlement(authorized_transaction.id, 100)
+      result.success?.should == false
+      result.errors.for(:transaction).on(:base)[0].code.should == Braintree::ErrorCodes::Transaction::PaymentInstrumentTypeIsNotAccepted
+    end
+
+    it "returns an error result if settlement amount greater than authorized amount" do
+      authorized_transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :merchant_account_id => SpecHelper::DefaultMerchantAccountId,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "06/2009"
+        }
+      )
+
+      result = Braintree::Transaction.submit_for_partial_settlement(authorized_transaction.id, 100)
+      result.success?.should == true
+
+      result = Braintree::Transaction.submit_for_partial_settlement(authorized_transaction.id, 901)
+      result.success?.should == false
+      result.errors.for(:transaction).on(:amount)[0].code.should == Braintree::ErrorCodes::Transaction::SettlementAmountIsTooLarge
+    end
+
+    it "returns an error result if status is not authorized" do
+      authorized_transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :merchant_account_id => SpecHelper::DefaultMerchantAccountId,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "06/2009"
+        }
+      )
+
+      result = Braintree::Transaction.void(authorized_transaction.id)
+      result.success?.should == true
+
+      result = Braintree::Transaction.submit_for_partial_settlement(authorized_transaction.id, 100)
+      result.success?.should == false
+      result.errors.for(:transaction).on(:base)[0].code.should == Braintree::ErrorCodes::Transaction::CannotSubmitForSettlement
+    end
+  end
+
+  describe "self.submit_for_partial_settlement!" do
+    it "returns the transaction if successful" do
+      original_transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "06/2009"
+        }
+      )
+      options = { :order_id => "ABC123" }
+      transaction = Braintree::Transaction.submit_for_partial_settlement!(original_transaction.id, "0.01", options)
+      transaction.status.should == Braintree::Transaction::Status::SubmittedForSettlement
+      transaction.order_id.should == options[:order_id]
+    end
+
+    it "raises a ValidationsFailed if unsuccessful" do
+      transaction = Braintree::Transaction.sale!(
+        :amount => Braintree::Test::TransactionAmounts::Authorize,
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "06/2009"
+        }
+      )
+      transaction.amount.should == BigDecimal.new("1000.00")
+      expect do
+        Braintree::Transaction.submit_for_partial_settlement!(transaction.id, "1000.01")
       end.to raise_error(Braintree::ValidationsFailed)
     end
   end
@@ -2753,6 +3438,9 @@ describe Braintree::Transaction do
         dispute.status.should == Braintree::Dispute::Status::Won
         dispute.transaction_details.amount.should == Braintree::Util.to_big_decimal("1000.00")
         dispute.transaction_details.id.should == "disputedtransaction"
+        dispute.kind.should == Braintree::Dispute::Kind::Chargeback
+        dispute.date_opened.should == Date.new(2014, 3, 1)
+        dispute.date_won.should == Date.new(2014, 3, 7)
       end
 
       it "includes disputes on found transactions" do
@@ -2815,6 +3503,8 @@ describe Braintree::Transaction do
         transaction.paypal_details.seller_protection_status.should_not be_nil
         transaction.paypal_details.capture_id.should_not be_nil
         transaction.paypal_details.refund_id.should_not be_nil
+        transaction.paypal_details.transaction_fee_amount.should_not be_nil
+        transaction.paypal_details.transaction_fee_currency_iso_code.should_not be_nil
       end
     end
   end
@@ -3231,7 +3921,8 @@ describe Braintree::Transaction do
       }
     )
 
-    response = Braintree::Configuration.instantiate.http.put "/transactions/#{transaction.id}/settle"
+    config = Braintree::Configuration.instantiate
+    response = config.http.put("#{config.base_merchant_path}/transactions/#{transaction.id}/settle")
     Braintree::Transaction.find(transaction.id)
   end
 
@@ -3244,7 +3935,8 @@ describe Braintree::Transaction do
       }
     )
 
-    Braintree::Configuration.instantiate.http.put "/transactions/#{transaction.id}/settle"
+    config = Braintree::Configuration.instantiate
+    config.http.put("#{config.base_merchant_path}/transactions/#{transaction.id}/settle")
     Braintree::Transaction.find(transaction.id)
   end
 
@@ -3260,8 +3952,9 @@ describe Braintree::Transaction do
       :options => { :hold_in_escrow => true }
     )
 
-    response = Braintree::Configuration.instantiate.http.put "/transactions/#{transaction.id}/settle"
-    response = Braintree::Configuration.instantiate.http.put "/transactions/#{transaction.id}/escrow"
+    config = Braintree::Configuration.instantiate
+    response = config.http.put("#{config.base_merchant_path}/transactions/#{transaction.id}/settle")
+    response = config.http.put("#{config.base_merchant_path}/transactions/#{transaction.id}/escrow")
     Braintree::Transaction.find(transaction.id)
   end
 
@@ -3414,6 +4107,88 @@ describe Braintree::Transaction do
         settlement_declined_transaction.processor_settlement_response_code.should == "4002"
         settlement_declined_transaction.processor_settlement_response_text.should == "Settlement Pending"
       end
+    end
+  end
+
+  context "shared payment method" do
+    before(:each) do
+      partner_merchant_gateway = Braintree::Gateway.new(
+        :merchant_id => "integration_merchant_public_id",
+        :public_key => "oauth_app_partner_user_public_key",
+        :private_key => "oauth_app_partner_user_private_key",
+        :environment => :development,
+        :logger => Logger.new("/dev/null")
+      )
+      @customer = partner_merchant_gateway.customer.create(
+        :first_name => "Joe",
+        :last_name => "Brown",
+        :company => "ExampleCo",
+        :email => "joe@example.com",
+        :phone => "312.555.1234",
+        :fax => "614.555.5678",
+        :website => "www.example.com"
+      ).customer
+      @address = partner_merchant_gateway.address.create(
+        :customer_id => @customer.id,
+        :first_name => "Testy",
+        :last_name => "McTesterson"
+      ).address
+      @credit_card = partner_merchant_gateway.credit_card.create(
+        :customer_id => @customer.id,
+        :cardholder_name => "Adam Davis",
+        :number => Braintree::Test::CreditCardNumbers::Visa,
+        :expiration_date => "05/2009"
+      ).credit_card
+
+      oauth_gateway = Braintree::Gateway.new(
+        :client_id => "client_id$development$integration_client_id",
+        :client_secret => "client_secret$development$integration_client_secret",
+        :logger => Logger.new("/dev/null")
+      )
+      access_token = Braintree::OAuthTestHelper.create_token(oauth_gateway, {
+        :merchant_public_id => "integration_merchant_id",
+        :scope => "grant_payment_method,shared_vault_transactions"
+      }).credentials.access_token
+
+      @granting_gateway = Braintree::Gateway.new(
+        :access_token => access_token,
+        :logger => Logger.new("/dev/null")
+      )
+    end
+
+    it "oauth app details are returned on transaction created via nonce granting" do
+      grant_result = @granting_gateway.credit_card.grant(@credit_card.token, false)
+
+      result = Braintree::Transaction.sale(
+        :payment_method_nonce => grant_result.payment_method_nonce.nonce,
+        :amount => Braintree::Test::TransactionAmounts::Authorize
+      )
+      result.transaction.facilitator_details.should_not == nil
+      result.transaction.facilitator_details.oauth_application_client_id.should == "client_id$development$integration_client_id"
+      result.transaction.facilitator_details.oauth_application_name.should == "PseudoShop"
+    end
+
+    it "allows transactions to be created with a shared payment method, customer, billing and shipping addresses" do
+      result = @granting_gateway.transaction.sale(
+        :shared_payment_method_token => @credit_card.token,
+        :shared_customer_id => @customer.id,
+        :shared_shipping_address_id => @address.id,
+        :shared_billing_address_id => @address.id,
+        :amount => Braintree::Test::TransactionAmounts::Authorize
+      )
+      result.success?.should == true
+      result.transaction.shipping_details.first_name.should == @address.first_name
+      result.transaction.billing_details.first_name.should == @address.first_name
+    end
+
+    it "oauth app details are returned on transaction created via a shared_payment_method_token" do
+      result = @granting_gateway.transaction.sale(
+        :shared_payment_method_token => @credit_card.token,
+        :amount => Braintree::Test::TransactionAmounts::Authorize
+      )
+      result.transaction.facilitator_details.should_not == nil
+      result.transaction.facilitator_details.oauth_application_client_id.should == "client_id$development$integration_client_id"
+      result.transaction.facilitator_details.oauth_application_name.should == "PseudoShop"
     end
   end
 end

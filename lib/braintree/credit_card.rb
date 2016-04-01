@@ -87,6 +87,11 @@ module Braintree
       Configuration.gateway.credit_card.from_nonce(nonce)
     end
 
+    # Deprecated. Use Braintree::PaymentMethod.grant
+    def self.grant(token, allow_vaulting)
+      Configuration.gateway.credit_card.grant(token, allow_vaulting)
+    end
+
     def self.sale(token, transaction_attributes)
       Configuration.gateway.transaction.sale(transaction_attributes.merge(:payment_method_token => token))
     end
@@ -203,7 +208,7 @@ module Braintree
     end
 
     def nonce
-      @nonce ||= PaymentMethodNonce.create(self)
+      @nonce ||= PaymentMethodNonce.create(token)
     end
 
     # Returns true if the card is associated with Venmo SDK

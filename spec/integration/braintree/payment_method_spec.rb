@@ -83,14 +83,120 @@ describe Braintree::PaymentMethod do
 
       result.should be_success
       apple_pay_card = result.payment_method
+      apple_pay_card.should be_a(Braintree::ApplePayCard)
       apple_pay_card.should_not be_nil
       apple_pay_card.token.should == token
       apple_pay_card.card_type.should == Braintree::ApplePayCard::CardType::AmEx
       apple_pay_card.payment_instrument_name.should == "AmEx 41002"
+      apple_pay_card.source_description.should == "AmEx 41002"
       apple_pay_card.default.should == true
       apple_pay_card.image_url.should =~ /apple_pay/
       apple_pay_card.expiration_month.to_i.should > 0
       apple_pay_card.expiration_year.to_i.should > 0
+      apple_pay_card.customer_id.should == customer.id
+    end
+
+    it "creates a payment method from a fake android pay proxy card nonce" do
+      customer = Braintree::Customer.create.customer
+      token = SecureRandom.hex(16)
+      result = Braintree::PaymentMethod.create(
+        :payment_method_nonce => Braintree::Test::Nonce::AndroidPayDiscover,
+        :customer_id => customer.id,
+        :token => token
+      )
+
+      result.should be_success
+      android_pay_card = result.payment_method
+      android_pay_card.should be_a(Braintree::AndroidPayCard)
+      android_pay_card.should_not be_nil
+      android_pay_card.token.should == token
+      android_pay_card.card_type.should == Braintree::CreditCard::CardType::Discover
+      android_pay_card.virtual_card_type.should == Braintree::CreditCard::CardType::Discover
+      android_pay_card.expiration_month.to_i.should > 0
+      android_pay_card.expiration_year.to_i.should > 0
+      android_pay_card.default.should == true
+      android_pay_card.image_url.should =~ /android_pay/
+      android_pay_card.source_card_type.should == Braintree::CreditCard::CardType::Visa
+      android_pay_card.source_card_last_4.should == "1111"
+      android_pay_card.google_transaction_id.should == "google_transaction_id"
+      android_pay_card.source_description.should == "Visa 1111"
+      android_pay_card.customer_id.should == customer.id
+    end
+
+    it "creates a payment method from a android pay network token nonce" do
+      customer = Braintree::Customer.create.customer
+      token = SecureRandom.hex(16)
+      result = Braintree::PaymentMethod.create(
+        :payment_method_nonce => Braintree::Test::Nonce::AndroidPayMasterCard,
+        :customer_id => customer.id,
+        :token => token
+      )
+
+      result.should be_success
+      android_pay_card = result.payment_method
+      android_pay_card.should be_a(Braintree::AndroidPayCard)
+      android_pay_card.should_not be_nil
+      android_pay_card.token.should == token
+      android_pay_card.card_type.should == Braintree::CreditCard::CardType::MasterCard
+      android_pay_card.virtual_card_type.should == Braintree::CreditCard::CardType::MasterCard
+      android_pay_card.expiration_month.to_i.should > 0
+      android_pay_card.expiration_year.to_i.should > 0
+      android_pay_card.default.should == true
+      android_pay_card.image_url.should =~ /android_pay/
+      android_pay_card.source_card_type.should == Braintree::CreditCard::CardType::MasterCard
+      android_pay_card.source_card_last_4.should == "4444"
+      android_pay_card.google_transaction_id.should == "google_transaction_id"
+      android_pay_card.source_description.should == "MasterCard 4444"
+      android_pay_card.customer_id.should == customer.id
+    end
+
+    it "creates a payment method from an amex express checkout card nonce" do
+      customer = Braintree::Customer.create.customer
+      token = SecureRandom.hex(16)
+      result = Braintree::PaymentMethod.create(
+        :payment_method_nonce => Braintree::Test::Nonce::AmexExpressCheckout,
+        :customer_id => customer.id,
+        :token => token
+      )
+
+      result.should be_success
+      amex_express_checkout_card = result.payment_method
+      amex_express_checkout_card.should be_a(Braintree::AmexExpressCheckoutCard)
+      amex_express_checkout_card.should_not be_nil
+
+      amex_express_checkout_card.default.should == true
+      amex_express_checkout_card.card_type.should == "American Express"
+      amex_express_checkout_card.token.should == token
+      amex_express_checkout_card.bin.should =~ /\A\d{6}\z/
+      amex_express_checkout_card.expiration_month.should =~ /\A\d{2}\z/
+      amex_express_checkout_card.expiration_year.should =~ /\A\d{4}\z/
+      amex_express_checkout_card.card_member_number.should =~ /\A\d{4}\z/
+      amex_express_checkout_card.card_member_expiry_date.should =~ /\A\d{2}\/\d{2}\z/
+      amex_express_checkout_card.image_url.should include(".png")
+      amex_express_checkout_card.source_description.should =~ /\AAmEx \d{4}\z/
+      amex_express_checkout_card.customer_id.should == customer.id
+    end
+
+    it "creates a payment method from venmo account nonce" do
+      customer = Braintree::Customer.create.customer
+      token = SecureRandom.hex(16)
+      result = Braintree::PaymentMethod.create(
+        :payment_method_nonce => Braintree::Test::Nonce::VenmoAccount,
+        :customer_id => customer.id,
+        :token => token
+      )
+
+      result.should be_success
+      venmo_account = result.payment_method
+      venmo_account.should be_a(Braintree::VenmoAccount)
+
+      venmo_account.default.should == true
+      venmo_account.token.should == token
+      venmo_account.username.should == "venmojoe"
+      venmo_account.venmo_user_id.should == "Venmo-Joe-1"
+      venmo_account.image_url.should include(".png")
+      venmo_account.source_description.should == "Venmo Account: venmojoe"
+      venmo_account.customer_id.should == customer.id
     end
 
     it "allows passing the make_default option alongside the nonce" do
@@ -160,6 +266,30 @@ describe Braintree::PaymentMethod do
       result.credit_card_verification.processor_response_code.should == "2000"
       result.credit_card_verification.processor_response_text.should == "Do Not Honor"
       result.credit_card_verification.merchant_account_id.should == SpecHelper::NonDefaultMerchantAccountId
+    end
+
+    it "respects verification amount when included outside of the nonce" do
+      nonce = nonce_for_new_payment_method(
+        :credit_card => {
+          :number => "4000111111111115",
+          :expiration_month => "11",
+          :expiration_year => "2099",
+        }
+      )
+      customer = Braintree::Customer.create!
+      result = Braintree::PaymentMethod.create(
+        :payment_method_nonce => nonce,
+        :customer_id => customer.id,
+        :options => {
+          :verify_card => true,
+          :verification_amount => "100.00"
+        }
+      )
+
+      result.should_not be_success
+      result.credit_card_verification.status.should == Braintree::Transaction::Status::ProcessorDeclined
+      result.credit_card_verification.processor_response_code.should == "2000"
+      result.credit_card_verification.processor_response_text.should == "Do Not Honor"
     end
 
     it "respects fail_on_duplicate_payment_method when included outside of the nonce" do
@@ -486,6 +616,7 @@ describe Braintree::PaymentMethod do
         result.should be_success
         result.payment_method.token.should_not == nil
         result.payment_method.image_url.should_not be_nil
+        result.payment_method.customer_id.should == customer.id
       end
     end
 
@@ -566,6 +697,7 @@ describe Braintree::PaymentMethod do
         paypal_account.should be_a(Braintree::PayPalAccount)
         paypal_account.token.should == payment_method_token
         paypal_account.email.should == "jane.doe@example.com"
+        paypal_account.customer_id.should == customer.id
       end
     end
 
@@ -589,6 +721,64 @@ describe Braintree::PaymentMethod do
         apple_pay_card.image_url.should =~ /apple_pay/
         apple_pay_card.expiration_month.to_i.should > 0
         apple_pay_card.expiration_year.to_i.should > 0
+        apple_pay_card.source_description.should == "AmEx 41002"
+        apple_pay_card.customer_id.should == customer.id
+      end
+    end
+
+    context "android pay cards" do
+      it "finds the proxy card payment method with the given token" do
+        customer = Braintree::Customer.create!
+        payment_method_token = "PAYMENT_METHOD_TOKEN_#{rand(36**3).to_s(36)}"
+        result = Braintree::PaymentMethod.create(
+          :payment_method_nonce => Braintree::Test::Nonce::AndroidPayDiscover,
+          :customer_id => customer.id,
+          :token => payment_method_token
+        )
+        result.should be_success
+
+        android_pay_card = Braintree::PaymentMethod.find(payment_method_token)
+        android_pay_card.should be_a(Braintree::AndroidPayCard)
+        android_pay_card.should_not be_nil
+        android_pay_card.token.should == payment_method_token
+        android_pay_card.card_type.should == Braintree::CreditCard::CardType::Discover
+        android_pay_card.virtual_card_type.should == Braintree::CreditCard::CardType::Discover
+        android_pay_card.expiration_month.to_i.should > 0
+        android_pay_card.expiration_year.to_i.should > 0
+        android_pay_card.default.should == true
+        android_pay_card.image_url.should =~ /android_pay/
+        android_pay_card.source_card_type.should == Braintree::CreditCard::CardType::Visa
+        android_pay_card.source_card_last_4.should == "1111"
+        android_pay_card.google_transaction_id.should == "google_transaction_id"
+        android_pay_card.source_description.should == "Visa 1111"
+        android_pay_card.customer_id.should == customer.id
+      end
+
+      it "finds the network token payment method with the given token" do
+        customer = Braintree::Customer.create!
+        payment_method_token = "PAYMENT_METHOD_TOKEN_#{rand(36**3).to_s(36)}"
+        result = Braintree::PaymentMethod.create(
+          :payment_method_nonce => Braintree::Test::Nonce::AndroidPayMasterCard,
+          :customer_id => customer.id,
+          :token => payment_method_token
+        )
+        result.should be_success
+
+        android_pay_card = Braintree::PaymentMethod.find(payment_method_token)
+        android_pay_card.should be_a(Braintree::AndroidPayCard)
+        android_pay_card.should_not be_nil
+        android_pay_card.token.should == payment_method_token
+        android_pay_card.card_type.should == Braintree::CreditCard::CardType::MasterCard
+        android_pay_card.virtual_card_type.should == Braintree::CreditCard::CardType::MasterCard
+        android_pay_card.expiration_month.to_i.should > 0
+        android_pay_card.expiration_year.to_i.should > 0
+        android_pay_card.default.should == true
+        android_pay_card.image_url.should =~ /android_pay/
+        android_pay_card.source_card_type.should == Braintree::CreditCard::CardType::MasterCard
+        android_pay_card.source_card_last_4.should == "4444"
+        android_pay_card.google_transaction_id.should == "google_transaction_id"
+        android_pay_card.source_description.should == "MasterCard 4444"
+        android_pay_card.customer_id.should == customer.id
       end
     end
 
@@ -608,6 +798,7 @@ describe Braintree::PaymentMethod do
         payment_method.token.should == payment_method_token
         payment_method.image_url.should_not be_nil
         payment_method.should be_a Braintree::UnknownPaymentMethod
+        payment_method.customer_id.should == customer.id
       end
     end
 
@@ -619,6 +810,47 @@ describe Braintree::PaymentMethod do
   end
 
   describe "self.delete" do
+    it "deletes an android pay card" do
+      customer = Braintree::Customer.create!
+
+      create_result = Braintree::PaymentMethod.create(
+        :payment_method_nonce => Braintree::Test::Nonce::AndroidPayDiscover,
+        :customer_id => customer.id
+      )
+
+      token = create_result.payment_method.token
+
+      android_card = Braintree::PaymentMethod.find(token)
+      android_card.should be_a(Braintree::AndroidPayCard)
+
+      delete_result = Braintree::PaymentMethod.delete(token)
+      delete_result.success?.should == true
+
+      expect do
+        Braintree::PaymentMethod.find(token)
+      end.to raise_error(Braintree::NotFoundError)
+    end
+
+    it "deletes an apple pay card" do
+      customer = Braintree::Customer.create!
+
+      create_result = Braintree::PaymentMethod.create(
+        :payment_method_nonce => Braintree::Test::Nonce::ApplePayAmEx,
+        :customer_id => customer.id
+      )
+      token = create_result.payment_method.token
+
+      apple_pay_card = Braintree::PaymentMethod.find(token)
+      apple_pay_card.should be_a(Braintree::ApplePayCard)
+
+      delete_result = Braintree::PaymentMethod.delete(token)
+      delete_result.success?.should == true
+
+      expect do
+        Braintree::PaymentMethod.find(token)
+      end.to raise_error(Braintree::NotFoundError)
+    end
+
     it "deletes a paypal account" do
       customer = Braintree::Customer.create!
       paypal_account_token = "PAYPAL_ACCOUNT_TOKEN_#{rand(36**3).to_s(36)}"
@@ -635,6 +867,7 @@ describe Braintree::PaymentMethod do
       paypal_account.should be_a(Braintree::PayPalAccount)
 
       result = Braintree::PaymentMethod.delete(paypal_account_token)
+      result.success?.should == true
 
       expect do
         Braintree::PaymentMethod.find(paypal_account_token)
@@ -659,11 +892,21 @@ describe Braintree::PaymentMethod do
         :customer_id => customer.id
       )
 
-      Braintree::PaymentMethod.delete(token)
+      result = Braintree::PaymentMethod.delete(token)
+      result.success?.should == true
 
       expect do
         Braintree::PaymentMethod.find(token)
       end.to raise_error(Braintree::NotFoundError, "payment method with token \"#{token}\" not found")
+    end
+
+    it "raises a NotFoundError exception if payment method cannot be found" do
+      token = "CREDIT_CARD_#{rand(36**3).to_s(36)}"
+      customer = Braintree::Customer.create!
+
+      expect do
+        Braintree::PaymentMethod.delete(token)
+      end.to raise_error(Braintree::NotFoundError)
     end
   end
 
@@ -976,6 +1219,124 @@ describe Braintree::PaymentMethod do
 
         updated_result.should_not be_success
         updated_result.errors.first.code.should == "92906"
+      end
+    end
+  end
+
+  context "payment method grant and revoke" do
+    before(:each) do
+      partner_merchant_gateway = Braintree::Gateway.new(
+        :merchant_id => "integration_merchant_public_id",
+        :public_key => "oauth_app_partner_user_public_key",
+        :private_key => "oauth_app_partner_user_private_key",
+        :environment => :development,
+        :logger => Logger.new("/dev/null")
+      )
+      customer = partner_merchant_gateway.customer.create(
+        :first_name => "Joe",
+        :last_name => "Brown",
+        :company => "ExampleCo",
+        :email => "joe@example.com",
+        :phone => "312.555.1234",
+        :fax => "614.555.5678",
+        :website => "www.example.com"
+      ).customer
+      @credit_card = partner_merchant_gateway.credit_card.create(
+        :customer_id => customer.id,
+        :cardholder_name => "Adam Davis",
+        :number => Braintree::Test::CreditCardNumbers::Visa,
+        :expiration_date => "05/2009"
+      ).credit_card
+
+      oauth_gateway = Braintree::Gateway.new(
+        :client_id => "client_id$development$integration_client_id",
+        :client_secret => "client_secret$development$integration_client_secret",
+        :logger => Logger.new("/dev/null")
+      )
+      access_token = Braintree::OAuthTestHelper.create_token(oauth_gateway, {
+        :merchant_public_id => "integration_merchant_id",
+        :scope => "grant_payment_method"
+      }).credentials.access_token
+
+      @granting_gateway = Braintree::Gateway.new(
+        :access_token => access_token,
+        :logger => Logger.new("/dev/null")
+      )
+    end
+
+    describe "self.grant" do
+      it "returns an error result when the grant doesn't succeed" do
+        grant_result = @granting_gateway.payment_method.grant("payment_method_from_grant", true)
+        grant_result.should_not be_success
+      end
+
+      it "returns a nonce that is transactable by a partner merchant exactly once" do
+        grant_result = @granting_gateway.payment_method.grant(@credit_card.token, false)
+        grant_result.should be_success
+
+        result = Braintree::Transaction.sale(
+          :payment_method_nonce => grant_result.payment_method_nonce.nonce,
+          :amount => Braintree::Test::TransactionAmounts::Authorize
+        )
+        result.should be_success
+
+        result2 = Braintree::Transaction.sale(
+          :payment_method_nonce => grant_result.payment_method_nonce.nonce,
+          :amount => Braintree::Test::TransactionAmounts::Authorize
+        )
+        result2.should_not be_success
+      end
+
+      it "returns a nonce that is not vaultable" do
+        grant_result = @granting_gateway.payment_method.grant(@credit_card.token, false)
+
+        customer_result = Braintree::Customer.create()
+
+        result = Braintree::PaymentMethod.create(
+          :customer_id => customer_result.customer.id,
+          :payment_method_nonce => grant_result.payment_method_nonce.nonce
+        )
+        result.should_not be_success
+      end
+
+      it "returns a nonce that is vaultable" do
+        grant_result = @granting_gateway.payment_method.grant(@credit_card.token, true)
+
+        customer_result = Braintree::Customer.create()
+
+        result = Braintree::PaymentMethod.create(
+          :customer_id => customer_result.customer.id,
+          :payment_method_nonce => grant_result.payment_method_nonce.nonce
+        )
+        result.should be_success
+      end
+
+      it "raises an error if the token isn't found" do
+        expect do
+          @granting_gateway.payment_method.grant("not_a_real_token", false)
+        end.to raise_error
+      end
+    end
+
+    describe "self.revoke" do
+      it "raises an error if the token isn't found" do
+        expect do
+          @granting_gateway.payment_method.revoke("not_a_real_token")
+        end.to raise_error
+      end
+
+      it "renders a granted nonce useless" do
+        grant_result = @granting_gateway.payment_method.grant(@credit_card.token, true)
+        revoke_result = @granting_gateway.payment_method.revoke(@credit_card.token)
+        revoke_result.should be_success
+
+        customer_result = Braintree::Customer.create()
+
+        result = Braintree::PaymentMethod.create(
+          :customer_id => customer_result.customer.id,
+          :payment_method_nonce => grant_result.payment_method_nonce.nonce
+        )
+        result.should_not be_success
       end
     end
   end

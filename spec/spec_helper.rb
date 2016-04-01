@@ -9,6 +9,7 @@ unless defined?(SPEC_HELPER_LOADED)
   braintree_lib = "#{project_root}/lib"
   $LOAD_PATH << braintree_lib
   require "braintree"
+  require File.dirname(__FILE__) + "/oauth_test_helper"
 
   Braintree::Configuration.environment = :development
   Braintree::Configuration.merchant_id = "integration_merchant_id"
@@ -36,6 +37,8 @@ unless defined?(SPEC_HELPER_LOADED)
     NonDefaultMerchantAccountId = "sandbox_credit_card_non_default"
     NonDefaultSubMerchantAccountId = "sandbox_sub_merchant_account"
     ThreeDSecureMerchantAccountId = "three_d_secure_merchant_account"
+    FakeAmexDirectMerchantAccountId = "fake_amex_direct_usd"
+    FakeVenmoAccountMerchantAccountId = "fake_first_data_venmo_account"
 
     TrialPlan = {
       :description => "Plan for integration tests -- with trial",
@@ -86,17 +89,20 @@ unless defined?(SPEC_HELPER_LOADED)
                                                       )
 
     def self.make_past_due(subscription, number_of_days_past_due = 1)
-      Braintree::Configuration.instantiate.http.put(
-        "/subscriptions/#{subscription.id}/make_past_due?days_past_due=#{number_of_days_past_due}"
+      config = Braintree::Configuration.instantiate
+      config.http.put(
+        "#{config.base_merchant_path}/subscriptions/#{subscription.id}/make_past_due?days_past_due=#{number_of_days_past_due}"
       )
     end
 
     def self.settle_transaction(transaction_id)
-      Braintree::Configuration.instantiate.http.put("/transactions/#{transaction_id}/settle")
+      config = Braintree::Configuration.instantiate
+      config.http.put("#{config.base_merchant_path}/transactions/#{transaction_id}/settle")
     end
 
     def self.create_3ds_verification(merchant_account_id, params)
-      response = Braintree::Configuration.instantiate.http.post("/three_d_secure/create_verification/#{merchant_account_id}", :three_d_secure_verification => params)
+      config = Braintree::Configuration.instantiate
+      response = config.http.post("#{config.base_merchant_path}/three_d_secure/create_verification/#{merchant_account_id}", :three_d_secure_verification => params)
       response[:three_d_secure_verification][:three_d_secure_token]
     end
 

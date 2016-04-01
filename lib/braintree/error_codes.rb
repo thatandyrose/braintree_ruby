@@ -81,6 +81,7 @@ module Braintree
       InvalidParamsForCreditCardUpdate = "91745"
       InvalidVenmoSDKPaymentMethodCode = "91727"
       NumberIsInvalid = "81715"
+      NumberIsProhibited = "81750"
       NumberIsRequired = "81714"
       NumberLengthIsInvalid = "81716"
       NumberMustBeTestNumber = "81717"
@@ -294,6 +295,7 @@ module Braintree
       PayPalNotEnabled = "91576"
       PayPalVaultRecordMissingData = "91583"
       PaymentInstrumentNotSupportedByMerchantAccount = "91577"
+      PaymentInstrumentTypeIsNotAccepted = "915101"
       PaymentMethodConflict = "91515"
       PaymentMethodConflictWithVenmoSDK = "91549"
       PaymentMethodDoesNotBelongToCustomer = "91516"
@@ -307,7 +309,11 @@ module Braintree
       PaymentMethodTokenIsInvalid = "91518"
       ProcessorAuthorizationCodeCannotBeSet = "91519"
       ProcessorAuthorizationCodeIsInvalid = "81520"
+      ProcessorDoesNotSupportAuths = "915104"
+      ProcessorDoesNotSupportUpdatingOrderId = "915107"
+      ProcessorDoesNotSupportUpdatingDescriptor = "915108"
       ProcessorDoesNotSupportCredits = "91546"
+      ProcessorDoesNotSupportPartialSettlement = "915102"
       ProcessorDoesNotSupportVoiceAuthorizations = "91545"
       PurchaseOrderNumberIsInvalid = "91548"
       PurchaseOrderNumberIsTooLong = "91537"
@@ -381,6 +387,7 @@ module Braintree
       EmailFormatIsInvalid = "93602"
       EmailIsRequired = "83601"
       InconsistentCountry = "93612"
+      PaymentMethodsAreInvalid = "93613"
     end
 
     module MerchantAccount
@@ -528,6 +535,24 @@ module Braintree
       OptionsNotAllowedWithoutCustomer = "93207"
       SignatureRevoked = "93203"
     end
+
+    module OAuth
+      InvalidGrant = "93801";
+      InvalidCredentials = "93802";
+      InvalidScope = "93803";
+      InvalidRequest = "93804";
+      UnsupportedGrantType = "93805";
+    end
+
+    module Verification
+      module Options
+        AmountCannotBeNegative = "94201"
+        AmountFormatIsInvalid = "94202"
+        AmountNotSupportedByProcessor = "94203"
+        MerchantAccountIdIsInvalid = "94204"
+        MerchantAccountIsSuspended = "94205"
+        MerchantAccountIsForbidden = "94206"
+      end
+    end
   end
 end
-
