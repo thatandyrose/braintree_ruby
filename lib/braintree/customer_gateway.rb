@@ -73,10 +73,13 @@ module Braintree
 
     def self._create_signature # :nodoc:
       credit_card_signature = CreditCardGateway._create_signature - [:customer_id]
+      paypal_account_signature = PayPalAccountGateway._create_nested_signature
       [
         :company, :email, :fax, :first_name, :id, :last_name, :phone, :website,
         :device_data, :payment_method_nonce,
+        {:risk_data => [:customer_browser, :customer_ip]},
         {:credit_card => credit_card_signature},
+        {:paypal_account => paypal_account_signature},
         {:custom_fields => :_any_key_}
       ]
     end
@@ -124,7 +127,7 @@ module Braintree
       credit_card_options[:options] << :update_existing_token
       [
         :company, :email, :fax, :first_name, :id, :last_name, :phone, :website,
-        :device_data, :payment_method_nonce,
+        :device_data, :payment_method_nonce, :default_payment_method_token,
         {:credit_card => credit_card_signature},
         {:custom_fields => :_any_key_}
       ]

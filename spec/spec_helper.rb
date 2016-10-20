@@ -39,6 +39,7 @@ unless defined?(SPEC_HELPER_LOADED)
     ThreeDSecureMerchantAccountId = "three_d_secure_merchant_account"
     FakeAmexDirectMerchantAccountId = "fake_amex_direct_usd"
     FakeVenmoAccountMerchantAccountId = "fake_first_data_venmo_account"
+    UsBankMerhantAccountId = "us_bank_merchant_account"
 
     TrialPlan = {
       :description => "Plan for integration tests -- with trial",
@@ -82,7 +83,7 @@ unless defined?(SPEC_HELPER_LOADED)
 
     TestMerchantConfig = Braintree::Configuration.new(
                                                       :logger => Logger.new("/dev/null"),
-                                                      :environment => :development,
+                                                      :environment => Braintree::Configuration.environment,
                                                       :merchant_id => "test_merchant_id",
                                                       :public_key => "test_public_key",
                                                       :private_key => "test_private_key"
@@ -126,7 +127,9 @@ unless defined?(SPEC_HELPER_LOADED)
 
     def self.simulate_form_post_for_tr(tr_data_string, form_data_hash, url = Braintree::TransparentRedirect.url)
       response = nil
-      Net::HTTP.start("localhost", Braintree::Configuration.instantiate.port) do |http|
+      config = Braintree::Configuration.instantiate
+      Net::HTTP.start(config.server, config.port) do |http|
+        http.use_ssl = config.ssl?
         request = Net::HTTP::Post.new("/" + url.split("/", 4)[3])
         request.add_field "Content-Type", "application/x-www-form-urlencoded"
         request.body = Braintree::Util.hash_to_query_string({:tr_data => tr_data_string}.merge(form_data_hash))

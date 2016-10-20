@@ -61,7 +61,7 @@ describe Braintree::CreditCard do
         :device_data,
         :fraud_merchant_id,
         :payment_method_nonce,
-        {:options => [:make_default, :verification_merchant_account_id, :verify_card, :verification_amount, :venmo_sdk_session]},
+        {:options => [:make_default, :verification_merchant_account_id, :verify_card, :verification_amount, :venmo_sdk_session, :fail_on_duplicate_payment_method]},
         {:billing_address => [
           :company,
           :country_code_alpha2,
@@ -91,8 +91,8 @@ describe Braintree::CreditCard do
 
   describe "self.create_credit_card_url" do
     it "returns the url" do
-      port = Braintree::Configuration.instantiate.port
-      Braintree::CreditCard.create_credit_card_url.should == "http://localhost:#{port}/merchants/integration_merchant_id/payment_methods/all/create_via_transparent_redirect_request"
+      config = Braintree::Configuration.instantiate
+      Braintree::CreditCard.create_credit_card_url.should == "http#{config.ssl? ? 's' : ''}://#{config.server}:#{config.port}/merchants/integration_merchant_id/payment_methods/all/create_via_transparent_redirect_request"
     end
   end
 

@@ -42,7 +42,7 @@ describe Braintree::Customer do
         :website => "www.microsoft.com"
       )
       result.success?.should == true
-      result.customer.id.should =~ /^\d{6}$/
+      result.customer.id.should =~ /^\d{6,}$/
       result.customer.first_name.should == "Bill"
       result.customer.last_name.should == "Gates"
       result.customer.company.should == "Microsoft"
@@ -56,8 +56,8 @@ describe Braintree::Customer do
 
     it "returns a successful result if successful using an access token" do
       oauth_gateway = Braintree::Gateway.new(
-        :client_id => "client_id$development$integration_client_id",
-        :client_secret => "client_secret$development$integration_client_secret",
+        :client_id => "client_id$#{Braintree::Configuration.environment}$integration_client_id",
+        :client_secret => "client_secret$#{Braintree::Configuration.environment}$integration_client_secret",
         :logger => Logger.new("/dev/null")
       )
       access_token = Braintree::OAuthTestHelper.create_token(oauth_gateway, {
@@ -80,7 +80,7 @@ describe Braintree::Customer do
         :website => "www.example.com"
       )
       result.success?.should == true
-      result.customer.id.should =~ /^\d{6}$/
+      result.customer.id.should =~ /^\d{6,}$/
       result.customer.first_name.should == "Joe"
       result.customer.last_name.should == "Brown"
     end
@@ -93,6 +93,22 @@ describe Braintree::Customer do
           :cvv => "100",
           :device_session_id => "abc123",
           :fraud_merchant_id => "7"
+        }
+      )
+
+      result.should be_success
+    end
+
+    it "supports creation including risk data with customer_browser and customer_ip" do
+      result = Braintree::Customer.create(
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::MasterCard,
+          :expiration_date => "05/2010",
+          :cvv => "100"
+        },
+        :risk_data => {
+          :customer_browser => "IE5",
+          :customer_ip => "192.168.0.1"
         }
       )
 
@@ -149,6 +165,7 @@ describe Braintree::Customer do
           :cvv => "100"
         }
       )
+
       result.success?.should == true
       result.customer.first_name.should == "Mike"
       result.customer.last_name.should == "Jones"
@@ -156,6 +173,24 @@ describe Braintree::Customer do
       result.customer.credit_cards[0].last_4.should == Braintree::Test::CreditCardNumbers::MasterCard[-4..-1]
       result.customer.credit_cards[0].expiration_date.should == "05/2010"
       result.customer.credit_cards[0].unique_number_identifier.should =~ /\A\w{32}\z/
+    end
+
+    it "can create a customer and a paypal account at the same time" do
+      result = Braintree::Customer.create(
+        :first_name => "Mike",
+        :last_name => "Jones",
+        :paypal_account => {
+          :email => "other@example.com",
+          :billing_agreement_id => "B-123456",
+          :options => {:make_default => true}
+        }
+      )
+
+      result.success?.should == true
+      result.customer.first_name.should == "Mike"
+      result.customer.last_name.should == "Jones"
+      result.customer.paypal_accounts[0].billing_agreement_id.should == "B-123456"
+      result.customer.paypal_accounts[0].email.should == "other@example.com"
     end
 
     it "verifies the card if credit_card[options][verify_card]=true" do
@@ -170,6 +205,19 @@ describe Braintree::Customer do
       )
       result.success?.should == false
       result.credit_card_verification.status.should == Braintree::Transaction::Status::ProcessorDeclined
+    end
+
+    it "allows a verification_amount" do
+      result = Braintree::Customer.create(
+        :first_name => "Mike",
+        :last_name => "Jones",
+        :credit_card => {
+          :number => Braintree::Test::CreditCardNumbers::MasterCard,
+          :expiration_date => "05/2019",
+          :options => {:verify_card => true, :verification_amount => "2.00"}
+        }
+      )
+      result.success?.should == true
     end
 
     it "fails on create if credit_card[options][fail_on_duplicate_payment_method]=true and there is a duplicated payment method" do
@@ -896,6 +944,98 @@ describe Braintree::Customer do
       result.customer.custom_fields[:store_me].should == "a value"
     end
 
+    it "does not update customer with duplicate payment method if fail_on_payment_method option set" do
+      customer = Braintree::Customer.create!(
+        :credit_card => {
+          :number => 4111111111111111,
+          :expiration_date => "05/2010",
+        }
+      )
+      result = Braintree::Customer.update(
+        customer.id,
+        :credit_card => {
+          :number => 4111111111111111,
+          :expiration_date => "05/2010",
+          :options=> {
+            :fail_on_duplicate_payment_method => true
+          }
+        }
+      )
+      result.success?.should == false
+      result.errors.for(:customer).for(:credit_card).on(:number)[0].message.should == "Duplicate card exists in the vault."
+    end
+
+    it "updates the default payment method" do
+      customer = Braintree::Customer.create!(
+        :first_name => "Joe",
+        :last_name => "Brown"
+      )
+
+      token1 = random_payment_method_token
+
+      payment_method1 = Braintree::PaymentMethod.create(
+        :customer_id => customer.id,
+        :payment_method_nonce => Braintree::Test::Nonce::TransactableVisa,
+        :token => token1
+      )
+
+      payment_method1 = Braintree::PaymentMethod.find(token1)
+      payment_method1.should be_default
+
+      token2 = random_payment_method_token
+
+      payment_method2 = Braintree::PaymentMethod.create(
+        :customer_id => customer.id,
+        :payment_method_nonce => Braintree::Test::Nonce::TransactableMasterCard,
+        :token => token2
+      )
+
+      Braintree::Customer.update(customer.id,
+        :default_payment_method_token => token2
+      )
+
+      payment_method2 = Braintree::PaymentMethod.find(token2)
+      payment_method2.should be_default
+    end
+
+    it "updates the default payment method in the options" do
+      customer = Braintree::Customer.create!(
+        :first_name => "Joe",
+        :last_name => "Brown"
+      )
+
+      token1 = random_payment_method_token
+
+      payment_method1 = Braintree::PaymentMethod.create(
+        :customer_id => customer.id,
+        :payment_method_nonce => Braintree::Test::Nonce::TransactableVisa,
+        :token => token1
+      )
+
+      payment_method1 = Braintree::PaymentMethod.find(token1)
+      payment_method1.should be_default
+
+      token2 = random_payment_method_token
+
+      payment_method2 = Braintree::PaymentMethod.create(
+        :customer_id => customer.id,
+        :payment_method_nonce => Braintree::Test::Nonce::TransactableMasterCard,
+        :token => token2
+      )
+
+      Braintree::Customer.update(customer.id,
+        :credit_card => {
+          :options => {
+            :update_existing_token => token2,
+            :make_default => true
+          }
+        }
+      )
+
+      payment_method2 = Braintree::PaymentMethod.find(token2)
+      payment_method2.should be_default
+    end
+
     it "can use any country code" do
       customer = Braintree::Customer.create!(
         :first_name => "Alex",
@@ -961,6 +1101,24 @@ describe Braintree::Customer do
       credit_card.billing_address.first_name.should == "Joe"
       credit_card.billing_address.last_name.should == "Cool"
       credit_card.billing_address.postal_code.should == "60666"
+    end
+
+    it "can update the customer and verify_card with a specific verification_amount" do
+      customer = Braintree::Customer.create!(
+        :first_name => "Joe"
+      )
+
+      result = Braintree::Customer.update(
+        customer.id,
+        :first_name => "New Joe",
+        :credit_card => {
+          :cardholder_name => "New Joe Cardholder",
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "12/2009",
+          :options => { :verify_card => true, :verification_amount => "2.00" }
+        }
+      )
+      result.success?.should == true
     end
 
     it "can update the nested billing address with billing_address_id" do

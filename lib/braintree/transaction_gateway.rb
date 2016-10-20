@@ -61,8 +61,15 @@ module Braintree
       raise NotFoundError, "transaction with id #{id.inspect} not found"
     end
 
-    def refund(transaction_id, amount = nil)
-      response = @config.http.post("#{@config.base_merchant_path}/transactions/#{transaction_id}/refund", :transaction => {:amount => amount})
+    def refund(transaction_id, amount_or_options = nil)
+      options = if amount_or_options.is_a?(Hash)
+                  amount_or_options
+                else
+                  { :amount => amount_or_options }
+                end
+
+      Util.verify_keys(TransactionGateway._refund_signature, options)
+      response = @config.http.post("#{@config.base_merchant_path}/transactions/#{transaction_id}/refund", :transaction => options)
       _handle_transaction_response(response)
     end
 
@@ -106,6 +113,13 @@ module Braintree
       _handle_transaction_response(response)
     end
 
+    def update_details(transaction_id, options = {})
+      raise ArgumentError, "transaction_id is invalid" unless transaction_id =~ /\A[0-9a-z]+\z/
+      Util.verify_keys(TransactionGateway._update_details_signature, options)
+      response = @config.http.put("#{@config.base_merchant_path}/transactions/#{transaction_id}/update_details", :transaction => options)
+      _handle_transaction_response(response)
+    end
+
     def submit_for_partial_settlement(authorized_transaction_id, amount = nil, options = {})
       raise ArgumentError, "authorized_transaction_id is invalid" unless authorized_transaction_id =~ /\A[0-9a-z]+\z/
       Util.verify_keys(TransactionGateway._submit_for_settlement_signature, options)
@@ -127,10 +141,11 @@ module Braintree
     def self._create_signature # :nodoc:
       [
         :amount, :customer_id, :merchant_account_id, :order_id, :channel, :payment_method_token,
-        :purchase_order_number, :recurring, :shipping_address_id, :type, :tax_amount, :tax_exempt,
+        :purchase_order_number, :recurring, :transaction_source, :shipping_address_id, :type, :tax_amount, :tax_exempt,
         :venmo_sdk_payment_method_code, :device_session_id, :service_fee_amount, :device_data, :fraud_merchant_id,
         :billing_address_id, :payment_method_nonce, :three_d_secure_token,
         :shared_payment_method_token, :shared_billing_address_id, :shared_customer_id, :shared_shipping_address_id,
+        {:risk_data => [:customer_browser, :customer_ip]},
         {:credit_card => [:token, :cardholder_name, :cvv, :expiration_date, :expiration_month, :expiration_year, :number]},
         {:customer => [:id, :company, :email, :fax, :first_name, :last_name, :phone, :website]},
         {
@@ -138,6 +153,13 @@ module Braintree
         },
         {
           :shipping => AddressGateway._shared_signature
+        },
+        {
+          :three_d_secure_pass_thru => [
+            :eci_flag,
+            :cavv,
+            :xid,
+          ]
         },
         {:options => [
           :hold_in_escrow,
@@ -167,6 +189,21 @@ module Braintree
       [
         :order_id,
         {:descriptor => [:name, :phone, :url]},
+      ]
+    end
+
+    def self._update_details_signature # :nodoc:
+      [
+        :amount,
+        :order_id,
+        {:descriptor => [:name, :phone, :url]},
+      ]
+    end
+
+    def self._refund_signature
+      [
+        :amount,
+        :order_id
       ]
     end
 

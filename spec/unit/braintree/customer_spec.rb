@@ -86,6 +86,7 @@ describe Braintree::Customer do
         :website,
         :device_data,
         :payment_method_nonce,
+        {:risk_data => [:customer_browser, :customer_ip]},
         {:credit_card => [
           :billing_address_id,
           :cardholder_name,
@@ -116,6 +117,12 @@ describe Braintree::Customer do
             :street_address
           ]}
         ]},
+        {:paypal_account => [
+          :email,
+          :token,
+          :billing_agreement_id,
+          {:options => [:make_default]},
+        ]},
         {:custom_fields => :_any_key_}
       ]
     end
@@ -134,6 +141,7 @@ describe Braintree::Customer do
         :website,
         :device_data,
         :payment_method_nonce,
+        :default_payment_method_token,
         {:credit_card => [
           :billing_address_id,
           :cardholder_name,
@@ -154,6 +162,7 @@ describe Braintree::Customer do
             :verify_card,
             :verification_amount,
             :venmo_sdk_session,
+            :fail_on_duplicate_payment_method,
             :update_existing_token
           ]},
           {:billing_address => [

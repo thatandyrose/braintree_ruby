@@ -481,6 +481,36 @@ describe Braintree::PaymentMethod do
       found_credit_card.billing_address.street_address.should == "456 Xyz Way"
     end
 
+    context "us bank account" do
+      it "creates a payment method from a us bank account nonce" do
+        customer = Braintree::Customer.create.customer
+        result = Braintree::PaymentMethod.create(
+          :payment_method_nonce => generate_valid_us_bank_account_nonce,
+          :customer_id => customer.id
+        )
+
+        result.should be_success
+        us_bank_account = result.payment_method
+        us_bank_account.should be_a(Braintree::UsBankAccount)
+        us_bank_account.routing_number.should == "123456789"
+        us_bank_account.last_4.should == "1234"
+        us_bank_account.account_type.should == "checking"
+        us_bank_account.account_description.should == "PayPal Checking - 1234"
+        us_bank_account.account_holder_name.should == "Dan Schulman"
+      end
+
+      it "does not creates a payment method from an invalid us bank account nonce" do
+        customer = Braintree::Customer.create.customer
+        result = Braintree::PaymentMethod.create(
+          :payment_method_nonce => generate_invalid_us_bank_account_nonce,
+          :customer_id => customer.id
+        )
+
+        result.should_not be_success
+        result.errors.for(:payment_method).on(:payment_method_nonce)[0].code.should == Braintree::ErrorCodes::PaymentMethod::PaymentMethodNonceUnknown
+      end
+    end
+
     context "paypal" do
       it "creates a payment method from an unvalidated future paypal account nonce" do
         nonce = nonce_for_paypal_account(:consent_code => "PAYPAL_CONSENT_CODE")
@@ -1137,6 +1167,33 @@ describe Braintree::PaymentMethod do
       end
     end
 
+    context "coinbase accounts" do
+      it "can make a coinbase account the default payment method" do
+        customer = Braintree::Customer.create!
+        result = Braintree::CreditCard.create(
+          :customer_id => customer.id,
+          :number => Braintree::Test::CreditCardNumbers::Visa,
+          :expiration_date => "05/2009",
+          :options => {:make_default => true}
+        )
+        result.should be_success
+
+        nonce = Braintree::Test::Nonce::Coinbase
+        original_token = Braintree::PaymentMethod.create(
+          :payment_method_nonce => nonce,
+          :customer_id => customer.id
+        ).payment_method.token
+
+        updated_result = Braintree::PaymentMethod.update(
+          original_token,
+          :options => {:make_default => true}
+        )
+
+        updated_customer = Braintree::Customer.find(customer.id)
+        updated_customer.default_payment_method.token.should == original_token
+      end
+    end
+
     context "paypal accounts" do
       it "updates a paypal account's token" do
         customer = Braintree::Customer.create!
@@ -1229,7 +1286,7 @@ describe Braintree::PaymentMethod do
         :merchant_id => "integration_merchant_public_id",
         :public_key => "oauth_app_partner_user_public_key",
         :private_key => "oauth_app_partner_user_private_key",
-        :environment => :development,
+        :environment => Braintree::Configuration.environment,
         :logger => Logger.new("/dev/null")
       )
       customer = partner_merchant_gateway.customer.create(
@@ -1249,8 +1306,8 @@ describe Braintree::PaymentMethod do
       ).credit_card
 
       oauth_gateway = Braintree::Gateway.new(
-        :client_id => "client_id$development$integration_client_id",
-        :client_secret => "client_secret$development$integration_client_secret",
+        :client_id => "client_id$#{Braintree::Configuration.environment}$integration_client_id",
+        :client_secret => "client_secret$#{Braintree::Configuration.environment}$integration_client_secret",
         :logger => Logger.new("/dev/null")
       )
       access_token = Braintree::OAuthTestHelper.create_token(oauth_gateway, {

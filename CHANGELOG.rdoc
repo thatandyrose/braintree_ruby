@@ -1,3 +1,50 @@
+== 2.68.1
+* Fix compatibility with new gateway endpoint
+
+== 2.68.0
+* Add 'UsBankAccount' payment method
+
+== 2.67.0
+* Add 'created_at' to subscription search
+* Expose 'plan_id' in subscription 'status_details'
+* Add cannot clone marketplace transaction error
+* Add FailOnDuplicatePaymentMethod to Customer update
+
+== 2.66.0
+* Add 'currency_iso_code' to subscription 'status_details'
+* Expose credit card 'product_id'
+* Add validation error for verifications with submerchants
+
+== 2.65.0
+* Allow authenticated proxies
+* Add new constant for Venmo Account payment instrument type
+
+== 2.64.0
+* Add 'default_payment_method' option to Customer
+
+== 2.63.0
+* Add order_id to Refund
+* Enabled 3DS pass thru support
+* Expose IDs in resource collections
+* Add 'success?' method to disbursement
+
+== 2.62.0
+* Add method of revoking OAuth access tokens.
+
+== 2.61.1
+* Fix compatibility in specs with Ruby 1.8.7
+
+== 2.61.0
+* Add transaction `UpdateDetails`
+* Support for Too Many Requests response codes
+* Add `default?` method to MerchantAccount
+
+== 2.60.0
+* Allow Coinbase account to be updated
+* Add support to pass currencies to merchant create
+* Support multiple partial settlements
+* Add IsInvalid error code for addresses
+
 == 2.59.0
 * Add support for third party Android Pay integrations
 

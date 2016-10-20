@@ -3,8 +3,8 @@ require File.expand_path(File.dirname(__FILE__) + "/../spec_helper")
 describe "OAuth" do
   before(:each) do
     @gateway = Braintree::Gateway.new(
-      :client_id => "client_id$development$integration_client_id",
-      :client_secret => "client_secret$development$integration_client_secret",
+      :client_id => "client_id$#{Braintree::Configuration.environment}$integration_client_id",
+      :client_secret => "client_secret$#{Braintree::Configuration.environment}$integration_client_secret",
       :logger => Logger.new("/dev/null")
     )
   end
@@ -80,6 +80,31 @@ describe "OAuth" do
     end
   end
 
+  describe "revoke_access_token" do
+    it "revokes an access token" do
+      code = Braintree::OAuthTestHelper.create_grant(@gateway, {
+        :merchant_public_id => "integration_merchant_id",
+        :scope => "read_write"
+      })
+      access_token = @gateway.oauth.create_token_from_code(
+        :code => code,
+        :scope => "read_write"
+      ).credentials.access_token
+
+      result = @gateway.oauth.revoke_access_token(access_token)
+      result.should be_success
+
+      gateway = Braintree::Gateway.new(
+        :access_token => access_token,
+        :logger => Logger.new("/dev/null")
+      )
+
+      expect do
+        gateway.customer.create
+      end.to raise_error(Braintree::AuthenticationError)
+    end
+  end
+
   describe "connect_url" do
     it "builds a connect url" do
       url = @gateway.oauth.connect_url(
@@ -87,6 +112,7 @@ describe "OAuth" do
         :redirect_uri => "http://bar.example.com",
         :scope => "read_write",
         :state => "baz_state",
+        :landing_page => "signup",
         :user => {
           :country => "USA",
           :email => "foo@example.com",
@@ -123,15 +149,16 @@ describe "OAuth" do
       )
 
       uri = URI.parse(url)
-      uri.host.should == "localhost"
+      uri.host.should == Braintree::Configuration.instantiate.server
       uri.path.should == "/oauth/connect"
 
       query = CGI.parse(uri.query)
       query["merchant_id"].should == ["integration_merchant_id"]
-      query["client_id"].should == ["client_id$development$integration_client_id"]
+      query["client_id"].should == ["client_id$#{Braintree::Configuration.environment}$integration_client_id"]
       query["redirect_uri"].should == ["http://bar.example.com"]
       query["scope"].should == ["read_write"]
       query["state"].should == ["baz_state"]
+      query["landing_page"].should == ["signup"]
 
       query["user[country]"].should == ["USA"]
       query["business[name]"].should == ["14 Ladders"]
@@ -179,7 +206,7 @@ describe "OAuth" do
       )
 
       uri = URI.parse(url)
-      uri.host.should == "localhost"
+      uri.host.should == Braintree::Configuration.instantiate.server
       uri.path.should == "/oauth/connect"
 
       query = CGI.parse(CGI.unescape(uri.query))
@@ -191,6 +218,11 @@ describe "OAuth" do
 
   describe "_compute_signature" do
     it "computes the correct signature" do
+      @gateway = Braintree::Gateway.new(
+        :client_id => "client_id$development$integration_client_id",
+        :client_secret => "client_secret$development$integration_client_secret",
+        :logger => Logger.new("/dev/null")
+      )
       url = "http://localhost:3000/oauth/connect?business%5Bname%5D=We+Like+Spaces&client_id=client_id%24development%24integration_client_id"
       signature = @gateway.oauth._compute_signature(url)
 

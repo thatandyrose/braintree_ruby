@@ -16,6 +16,7 @@ module Braintree
       FirstNameIsInvalid = "91819"
       FirstNameIsTooLong = "81805"
       InconsistentCountry = "91815"
+      IsInvalid = "91828"
       LastNameIsInvalid = "91820"
       LastNameIsTooLong = "81806"
       LocalityIsInvalid = "91824"
@@ -106,10 +107,12 @@ module Braintree
         UseBillingForShippingDisabled = "91572"
         VerificationAmountCannotBeNegative = "91739"
         VerificationAmountFormatIsInvalid = "91740"
+        VerificationAmountIsTooLarge = "91752"
         VerificationAmountNotSupportedByProcessor = "91741"
         VerificationMerchantAccountIdIsInvalid = "91728"
         VerificationMerchantAccountIsForbidden = "91743"
         VerificationMerchantAccountIsSuspended = "91742"
+        VerificationMerchantAccountCannotBeSubMerchantAccount = "91755"
       end
     end
 
@@ -263,6 +266,7 @@ module Braintree
       CannotBeVoided = "91504"
       CannotCancelRelease = "91562"
       CannotCloneCredit = "91543"
+      CannotCloneMarketplaceTransaction = "915137"
       CannotCloneTransactionWithPayPalAccount = "91573"
       CannotCloneTransactionWithVaultCreditCard = "91540"
       CannotCloneUnsuccessfulTransaction = "91542"
@@ -277,6 +281,7 @@ module Braintree
       CannotReleaseFromEscrow = "91561"
       CannotSimulateTransactionSettlement = "91575"
       CannotSubmitForSettlement = "91507"
+      CannotUpdateTransactionDetailsNotSubmittedForSettlement = "915129"
       ChannelIsTooLong = "91550"
       CreditCardIsRequired = "91508"
       CustomFieldIsInvalid = "91526"
@@ -312,6 +317,7 @@ module Braintree
       ProcessorDoesNotSupportAuths = "915104"
       ProcessorDoesNotSupportUpdatingOrderId = "915107"
       ProcessorDoesNotSupportUpdatingDescriptor = "915108"
+      ProcessorDoesNotSupportUpdatingTransactionDetails = "915130"
       ProcessorDoesNotSupportCredits = "91546"
       ProcessorDoesNotSupportPartialSettlement = "915102"
       ProcessorDoesNotSupportVoiceAuthorizations = "91545"
@@ -337,6 +343,11 @@ module Braintree
       ThreeDSecureAuthenticationFailed = "81571"
       ThreeDSecureTokenIsInvalid = "91568"
       ThreeDSecureTransactionDataDoesntMatchVerify = "91570"
+      ThreeDSecureEciFlagIsRequired = "915113"
+      ThreeDSecureCavvIsRequired = "915116"
+      ThreeDSecureXidIsRequired = "915115"
+      ThreeDSecureEciFlagIsInvalid = "915114"
+      ThreeDSecureMerchantAccountDoesNotSupportCardType = "915131"
       TypeIsInvalid = "91523"
       TypeIsRequired = "91524"
       UnsupportedVoiceAuthorization = "91539"
@@ -384,10 +395,12 @@ module Braintree
       CountryCodeNumericIsNotAccepted = "93608"
       CountryNameIsInvalid = "93611"
       CountryNameIsNotAccepted = "93610"
+      CurrenciesAreInvalid = "93614"
       EmailFormatIsInvalid = "93602"
       EmailIsRequired = "83601"
       InconsistentCountry = "93612"
       PaymentMethodsAreInvalid = "93613"
+      PaymentMethodsAreNotAllowed = "93615"
     end
 
     module MerchantAccount
@@ -548,10 +561,12 @@ module Braintree
       module Options
         AmountCannotBeNegative = "94201"
         AmountFormatIsInvalid = "94202"
+        AmountIsTooLarge = "94207"
         AmountNotSupportedByProcessor = "94203"
         MerchantAccountIdIsInvalid = "94204"
         MerchantAccountIsSuspended = "94205"
         MerchantAccountIsForbidden = "94206"
+        MerchantAccountCannotBeSubMerchantAccount = "94208"
       end
     end
   end

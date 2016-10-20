@@ -122,6 +122,7 @@ module Braintree
     attr_reader :risk_data
     attr_reader :facilitator_details
     attr_reader :three_d_secure_info
+    attr_reader :us_bank_account_details
 
     def self.create(attributes)
       config.gateway.transaction.create(attributes)
@@ -179,12 +180,12 @@ module Braintree
       return_object_or_raise(:transaction) { hold_in_escrow(id) }
     end
 
-    def self.refund(id, amount = nil)
-      config.gateway.transaction.refund(id, amount)
+    def self.refund(id, amount_or_options = nil)
+      config.gateway.transaction.refund(id, amount_or_options)
     end
 
-    def self.refund!(id, amount = nil)
-      return_object_or_raise(:transaction) { refund(id, amount) }
+    def self.refund!(id, amount_or_options = nil)
+      return_object_or_raise(:transaction) { refund(id, amount_or_options) }
     end
 
     def self.sale(attributes)
@@ -214,6 +215,14 @@ module Braintree
 
     def self.submit_for_settlement!(transaction_id, amount = nil, options = {})
       return_object_or_raise(:transaction) { submit_for_settlement(transaction_id, amount, options) }
+    end
+
+    def self.update_details(transaction_id, options = {})
+      Configuration.gateway.transaction.update_details(transaction_id, options)
+    end
+
+    def self.update_details!(transaction_id, options = {})
+      return_object_or_raise(:transaction) { update_details(transaction_id, options) }
     end
 
     def self.submit_for_partial_settlement(authorized_transaction_id, amount = nil, options = {})
@@ -260,6 +269,7 @@ module Braintree
       @risk_data = RiskData.new(attributes[:risk_data]) if attributes[:risk_data]
       @facilitator_details = FacilitatorDetails.new(attributes[:facilitator_details]) if attributes[:facilitator_details]
       @three_d_secure_info = ThreeDSecureInfo.new(attributes[:three_d_secure_info]) if attributes[:three_d_secure_info]
+      @us_bank_account_details = UsBankAccountDetails.new(attributes[:us_bank_account]) if attributes[:us_bank_account]
     end
 
     # True if <tt>other</tt> is a Braintree::Transaction with the same id.
