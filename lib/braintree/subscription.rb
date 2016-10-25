@@ -59,8 +59,8 @@ module Braintree
     end
 
     # See http://www.braintreepayments.com/docs/ruby/subscriptions/search
-    def self.search(config, options = {}, &block)
-      config.gateway.subscription.search(options, &block)
+    def self.search(config, &block)
+      config.gateway.subscription.search(&block)
     end
 
     def self.update(subscription_id, attributes)

@@ -32,12 +32,12 @@ module Braintree
       raise NotFoundError, "subscription with id #{id.inspect} not found"
     end
 
-    def search(options, &block)
+    def search(&block)
       search = SubscriptionSearch.new
       block.call(search) if block
 
       response = @config.http.post("#{@config.base_merchant_path}/subscriptions/advanced_search_ids", {:search => search.to_hash})
-      ResourceCollection.new(response, options) { |ids| _fetch_subscriptions(search, ids) }
+      ResourceCollection.new(response) { |ids| _fetch_subscriptions(search, ids) }
     end
 
     def update(subscription_id, attributes)

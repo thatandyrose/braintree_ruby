@@ -3,22 +3,19 @@ module Braintree
     include Enumerable
 
     attr_reader :ids
+    attr_accessor :page_size
 
-    def initialize(response, options = {}, &block) # :nodoc:
+    def initialize(response, &block) # :nodoc:
       @ids = Util.extract_attribute_as_array(response[:search_results], :ids)
 
-      if options[:page_size].present?
-        @page_size = options[:page_size]
-      else
-        @page_size = response[:search_results][:page_size]
-      end
+      self.page_size = response[:search_results][:page_size]
 
       @paging_block = block
     end
 
     # Yields each item
     def each(&block)
-      @ids.each_slice(@page_size) do |page_of_ids|
+      @ids.each_slice(page_size) do |page_of_ids|
         resources = @paging_block.call(page_of_ids)
         resources.each(&block)
       end
