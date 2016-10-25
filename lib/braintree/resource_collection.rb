@@ -4,9 +4,15 @@ module Braintree
 
     attr_reader :ids
 
-    def initialize(response, &block) # :nodoc:
+    def initialize(response, options = {}, &block) # :nodoc:
       @ids = Util.extract_attribute_as_array(response[:search_results], :ids)
-      @page_size = response[:search_results][:page_size]
+
+      if options[:page_size].present?
+        @page_size = options[:page_size]
+      else
+        @page_size = response[:search_results][:page_size]
+      end
+
       @paging_block = block
     end
 
