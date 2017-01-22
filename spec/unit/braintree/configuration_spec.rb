@@ -78,6 +78,14 @@ describe Braintree::Configuration do
       config.proxy_user.should == 'user'
       config.proxy_pass.should == 'test'
     end
+
+    it "accepts ssl version" do
+      config = Braintree::Configuration.new(
+        :ssl_version => :TLSv1_2
+      )
+
+      config.ssl_version.should == :TLSv1_2
+    end
   end
 
   describe "base_merchant_path" do
@@ -139,6 +147,13 @@ describe Braintree::Configuration do
         Braintree::Configuration.environment
       end.to raise_error(Braintree::ConfigurationError, "Braintree::Configuration.environment needs to be set")
     end
+
+    it "raises an exception if it is an empty string" do
+      Braintree::Configuration.instance_variable_set(:@environment, "")
+      expect do
+        Braintree::Configuration.environment
+      end.to raise_error(Braintree::ConfigurationError, "Braintree::Configuration.environment needs to be set")
+    end
   end
 
   describe "self.gateway" do
@@ -154,6 +169,13 @@ describe Braintree::Configuration do
       gateway.config.proxy_port.should == 8080
       gateway.config.proxy_user.should == "user"
       gateway.config.proxy_pass.should == "test"
+    end
+
+    it "sets the ssl version" do
+      Braintree::Configuration.ssl_version = :TLSv1_2
+      gateway = Braintree::Configuration.gateway
+
+      gateway.config.ssl_version.should == :TLSv1_2
     end
   end
 
@@ -200,6 +222,13 @@ describe Braintree::Configuration do
         Braintree::Configuration.merchant_id
       end.to raise_error(Braintree::ConfigurationError, "Braintree::Configuration.merchant_id needs to be set")
     end
+
+    it "raises an exception if it is an empty string" do
+      Braintree::Configuration.instance_variable_set(:@merchant_id, "")
+      expect do
+        Braintree::Configuration.merchant_id
+      end.to raise_error(Braintree::ConfigurationError, "Braintree::Configuration.merchant_id needs to be set")
+    end
   end
 
   describe "self.public_key" do
@@ -209,11 +238,25 @@ describe Braintree::Configuration do
         Braintree::Configuration.public_key
       end.to raise_error(Braintree::ConfigurationError, "Braintree::Configuration.public_key needs to be set")
     end
+
+    it "raises an exception if it is an empty string" do
+      Braintree::Configuration.instance_variable_set(:@public_key, "")
+      expect do
+        Braintree::Configuration.public_key
+      end.to raise_error(Braintree::ConfigurationError, "Braintree::Configuration.public_key needs to be set")
+    end
   end
 
   describe "self.private_key" do
     it "raises an exception if it hasn't been set yet" do
       Braintree::Configuration.instance_variable_set(:@private_key, nil)
+      expect do
+        Braintree::Configuration.private_key
+      end.to raise_error(Braintree::ConfigurationError, "Braintree::Configuration.private_key needs to be set")
+    end
+
+    it "raises an exception if it is an empty string" do
+      Braintree::Configuration.instance_variable_set(:@private_key, "")
       expect do
         Braintree::Configuration.private_key
       end.to raise_error(Braintree::ConfigurationError, "Braintree::Configuration.private_key needs to be set")
@@ -261,7 +304,6 @@ describe Braintree::Configuration do
       Braintree::Configuration.environment = :sandbox
       Braintree::Configuration.instantiate.protocol.should == "https"
     end
-
   end
 
   describe "server" do

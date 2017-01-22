@@ -59,9 +59,46 @@ end
 def generate_valid_us_bank_account_nonce()
   raw_client_token = Braintree::ClientToken.generate
   client_token = decode_client_token(raw_client_token)
-  url = client_token["braintree_api"]["url"]
-  out = `./spec/client.sh #{url}/tokens`
-  out.strip
+
+  url = client_token["braintree_api"]["url"] + "/tokens"
+  token = client_token["braintree_api"]["access_token"]
+  payload = {
+    :type => "us_bank_account",
+    :billing_address => {
+      :street_address => "123 Ave",
+      :region => "CA",
+      :locality => "San Francisco",
+      :postal_code => "94112"
+    },
+    :account_type => "checking",
+    :routing_number => "021000021",
+    :account_number => "567891234",
+    :account_holder_name => "Dan Schulman",
+    :ach_mandate => {
+      :text => "cl mandate text"
+    }
+  }
+
+  json = _cosmos_post(token, url, payload)
+  json["data"]["id"]
+end
+
+def generate_valid_ideal_payment_nonce(amount = Braintree::Test::TransactionAmounts::Authorize)
+  raw_client_token = Braintree::ClientToken.generate
+  client_token = decode_client_token(raw_client_token)
+
+  token = client_token["braintree_api"]["access_token"]
+  url = client_token["braintree_api"]["url"] + "/ideal-payments"
+  payload = {
+    :issuer => "RABONL2U",
+    :order_id => SpecHelper::DefaultOrderId,
+    :amount => amount,
+    :currency => "EUR",
+    :redirect_url => "https://braintree-api.com",
+  }
+
+  json = _cosmos_post(token, url, payload)
+  json["data"]["id"]
 end
 
 def sample(arr)
@@ -73,6 +110,23 @@ def generate_invalid_us_bank_account_nonce
   nonce = "tokenusbankacct_"
   nonce += 4.times.map { sample(nonce_characters) }.join("_")
   nonce += "_xxx"
+end
+
+def _cosmos_post(token, url, payload)
+  uri = URI::parse(url)
+  connection = Net::HTTP.new(uri.host, uri.port)
+  connection.use_ssl = true
+  connection.verify_mode = OpenSSL::SSL::VERIFY_PEER
+  resp = connection.start do |http|
+    request = Net::HTTP::Post.new(uri.path)
+    request["Content-Type"] = "application/json"
+    request["Braintree-Version"] = "2015-11-01"
+    request["Authorization"] = "Bearer #{token}"
+    request.body = payload.to_json
+    http.request(request)
+  end
+
+  JSON.parse(resp.body)
 end
 
 class ClientApiHttp

@@ -6,6 +6,18 @@ module Braintree
       @config.assert_has_access_token_or_keys
     end
 
+    def all
+      pc = PaginatedCollection.new { |page| _fetch_merchant_accounts(page) }
+      SuccessfulResult.new(:merchant_accounts => pc)
+    end
+
+    def _fetch_merchant_accounts(page_number)
+      response = @config.http.get("#{@config.base_merchant_path}/merchant_accounts?page=#{page_number}")
+      body = response[:merchant_accounts]
+      merchant_accounts = Util.extract_attribute_as_array(body, :merchant_account).map { |merchant_account| MerchantAccount._new(@gateway, merchant_account) }
+      PaginatedResult.new(body[:total_items], body[:page_size], merchant_accounts)
+    end
+
     def create(attributes)
       signature = MerchantAccountGateway._detect_signature(attributes)
       Util.verify_keys(signature, attributes)
@@ -25,6 +37,10 @@ module Braintree
       _do_update "/merchant_accounts/#{merchant_account_id}/update_via_api", :merchant_account => attributes
     end
 
+    def create_for_currency(params)
+      _create_for_currency(params)
+    end
+
     def _do_create(path, params=nil) # :nodoc:
       response = @config.http.post("#{@config.base_merchant_path}#{path}", params)
       if response[:api_error_response]
@@ -40,6 +56,20 @@ module Braintree
         ErrorResult.new(@gateway, response[:api_error_response])
       else
         SuccessfulResult.new(:merchant_account => MerchantAccount._new(@gateway, response[:merchant_account]))
+      end
+    end
+
+    def _create_for_currency(params)
+      response = @config.http.post("#{@config.base_merchant_path}/merchant_accounts/create_for_currency", :merchant_account => params)
+
+      if response.has_key?(:response) && response[:response][:merchant_account]
+        Braintree::SuccessfulResult.new(
+          :merchant_account => MerchantAccount._new(@gateway, response[:response][:merchant_account])
+        )
+      elsif response[:api_error_response]
+        ErrorResult.new(@gateway, response[:api_error_response])
+      else
+        raise UnexpectedError, "expected :merchant or :api_error_response"
       end
     end
 

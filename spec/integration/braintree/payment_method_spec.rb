@@ -492,11 +492,16 @@ describe Braintree::PaymentMethod do
         result.should be_success
         us_bank_account = result.payment_method
         us_bank_account.should be_a(Braintree::UsBankAccount)
-        us_bank_account.routing_number.should == "123456789"
+        us_bank_account.routing_number.should == "021000021"
         us_bank_account.last_4.should == "1234"
         us_bank_account.account_type.should == "checking"
-        us_bank_account.account_description.should == "PayPal Checking - 1234"
         us_bank_account.account_holder_name.should == "Dan Schulman"
+        us_bank_account.bank_name.should =~ /CHASE/
+        us_bank_account.default.should == true
+        us_bank_account.ach_mandate.text.should == "cl mandate text"
+        us_bank_account.ach_mandate.accepted_at.should be_a Time
+
+        Braintree::PaymentMethod.find(us_bank_account.token).should be_a(Braintree::UsBankAccount)
       end
 
       it "does not creates a payment method from an invalid us bank account nonce" do
@@ -896,7 +901,7 @@ describe Braintree::PaymentMethod do
       paypal_account = Braintree::PaymentMethod.find(paypal_account_token)
       paypal_account.should be_a(Braintree::PayPalAccount)
 
-      result = Braintree::PaymentMethod.delete(paypal_account_token)
+      result = Braintree::PaymentMethod.delete(paypal_account_token, {:revoke_all_grants => false})
       result.success?.should == true
 
       expect do
@@ -1328,7 +1333,7 @@ describe Braintree::PaymentMethod do
       end
 
       it "returns a nonce that is transactable by a partner merchant exactly once" do
-        grant_result = @granting_gateway.payment_method.grant(@credit_card.token, false)
+        grant_result = @granting_gateway.payment_method.grant(@credit_card.token, :allow_vaulting => false)
         grant_result.should be_success
 
         result = Braintree::Transaction.sale(
@@ -1357,7 +1362,7 @@ describe Braintree::PaymentMethod do
       end
 
       it "returns a nonce that is vaultable" do
-        grant_result = @granting_gateway.payment_method.grant(@credit_card.token, true)
+        grant_result = @granting_gateway.payment_method.grant(@credit_card.token, :allow_vaulting => true)
 
         customer_result = Braintree::Customer.create()
 
@@ -1373,6 +1378,13 @@ describe Braintree::PaymentMethod do
           @granting_gateway.payment_method.grant("not_a_real_token", false)
         end.to raise_error
       end
+
+      it "returns a valid nonce with no options set" do
+        expect do
+          grant_result = @granting_gateway.payment_method.grant(@credit_card.token)
+          grant_result.should be_success
+        end
+      end
     end
 
     describe "self.revoke" do
@@ -1383,7 +1395,21 @@ describe Braintree::PaymentMethod do
       end
 
       it "renders a granted nonce useless" do
-        grant_result = @granting_gateway.payment_method.grant(@credit_card.token, true)
+        grant_result = @granting_gateway.payment_method.grant(@credit_card.token)
+        revoke_result = @granting_gateway.payment_method.revoke(@credit_card.token)
+        revoke_result.should be_success
+
+        customer_result = Braintree::Customer.create()
+
+        result = Braintree::PaymentMethod.create(
+          :customer_id => customer_result.customer.id,
+          :payment_method_nonce => grant_result.payment_method_nonce.nonce
+        )
+        result.should_not be_success
+      end
+
+      it "renders a granted nonce obtained uisng options hash, useless" do
+        grant_result = @granting_gateway.payment_method.grant(@credit_card.token, :allow_vaulting => true)
         revoke_result = @granting_gateway.payment_method.revoke(@credit_card.token)
         revoke_result.should be_success
 

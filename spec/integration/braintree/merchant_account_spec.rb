@@ -60,6 +60,61 @@ VALID_APPLICATION_PARAMS = {
 }
 
 describe Braintree::MerchantAccount do
+  describe "all" do
+    it "returns all merchant accounts" do
+      gateway = Braintree::Gateway.new(
+        :client_id => "client_id$#{Braintree::Configuration.environment}$integration_client_id",
+        :client_secret => "client_secret$#{Braintree::Configuration.environment}$integration_client_secret",
+        :logger => Logger.new("/dev/null")
+      )
+
+      code = Braintree::OAuthTestHelper.create_grant(gateway, {
+        :merchant_public_id => "integration_merchant_id",
+        :scope => "read_write"
+      })
+
+      result = gateway.oauth.create_token_from_code(
+        :code => code,
+        :scope => "read_write"
+      )
+
+      gateway = Braintree::Gateway.new(
+        :access_token => result.credentials.access_token,
+        :logger => Logger.new("/dev/null")
+      )
+
+      result = gateway.merchant_account.all
+      result.should be_success
+      result.merchant_accounts.count.should > 20
+    end
+
+    it "returns merchant account with correct attributes" do
+      gateway = Braintree::Gateway.new(
+        :client_id => "client_id$#{Braintree::Configuration.environment}$integration_client_id",
+        :client_secret => "client_secret$#{Braintree::Configuration.environment}$integration_client_secret",
+        :logger => Logger.new("/dev/null")
+      )
+
+      result = gateway.merchant.create(
+        :email => "name@email.com",
+        :country_code_alpha3 => "USA",
+        :payment_methods => ["credit_card", "paypal"]
+      )
+
+      gateway = Braintree::Gateway.new(
+        :access_token => result.credentials.access_token,
+        :logger => Logger.new("/dev/null")
+      )
+
+      result = gateway.merchant_account.all
+      result.should be_success
+      result.merchant_accounts.count.should == 1
+      result.merchant_accounts.first.currency_iso_code.should == "USD"
+      result.merchant_accounts.first.status.should == "active"
+      result.merchant_accounts.first.default.should == true
+    end
+  end
+
   describe "create" do
     it "accepts the deprecated parameters" do
       result = Braintree::MerchantAccount.create(DEPRECATED_APPLICATION_PARAMS)
@@ -132,6 +187,109 @@ describe Braintree::MerchantAccount do
 
         result.should be_success
       end
+    end
+  end
+
+  describe "create_for_currency" do
+    it "creates a new merchant account for currency" do
+      result = SpecHelper::create_merchant
+      result.should be_success
+
+      gateway = Braintree::Gateway.new(
+        :access_token => result.credentials.access_token,
+        :logger => Logger.new("/dev/null")
+      )
+
+      result = gateway.merchant_account.create_for_currency(
+        :currency => "JPY"
+      )
+      result.should be_success
+      result.merchant_account.currency_iso_code.should == "JPY"
+    end
+
+    it "returns error if a merchant account already exists for that currency" do
+      result = SpecHelper::create_merchant
+      result.should be_success
+
+      gateway = Braintree::Gateway.new(
+        :access_token => result.credentials.access_token,
+        :logger => Logger.new("/dev/null")
+      )
+
+      result = gateway.merchant_account.create_for_currency(
+        :currency => "USD"
+      )
+      result.should be_success
+
+      result = gateway.merchant_account.create_for_currency(
+        :currency => "USD"
+      )
+      result.should_not be_success
+
+      errors = result.errors.for(:merchant).on(:currency)
+      errors[0].code.should == Braintree::ErrorCodes::Merchant::MerchantAccountExistsForCurrency
+    end
+
+    it "returns error if no currency is provided" do
+      result = SpecHelper::create_merchant
+      result.should be_success
+
+      gateway = Braintree::Gateway.new(
+        :access_token => result.credentials.access_token,
+        :logger => Logger.new("/dev/null")
+      )
+
+      result = gateway.merchant_account.create_for_currency(
+        :currency => nil
+      )
+      result.should_not be_success
+
+      errors = result.errors.for(:merchant).on(:currency)
+      errors[0].code.should == Braintree::ErrorCodes::Merchant::CurrencyIsRequired
+
+      result = gateway.merchant_account.create_for_currency({})
+      result.should_not be_success
+
+      errors = result.errors.for(:merchant).on(:currency)
+      errors[0].code.should == Braintree::ErrorCodes::Merchant::CurrencyIsRequired
+    end
+
+    it "returns error if a currency is not supported" do
+      result = SpecHelper::create_merchant
+      result.should be_success
+
+      gateway = Braintree::Gateway.new(
+        :access_token => result.credentials.access_token,
+        :logger => Logger.new("/dev/null")
+      )
+
+      result = gateway.merchant_account.create_for_currency(
+        :currency => "FAKE_CURRENCY"
+      )
+      result.should_not be_success
+
+      errors = result.errors.for(:merchant).on(:currency)
+      errors[0].code.should == Braintree::ErrorCodes::Merchant::CurrencyIsInvalid
+    end
+
+    it "returns error if id is passed and already taken" do
+      result = SpecHelper::create_merchant
+      result.should be_success
+
+      gateway = Braintree::Gateway.new(
+        :access_token => result.credentials.access_token,
+        :logger => Logger.new("/dev/null")
+      )
+
+      merchant = result.merchant
+      result = gateway.merchant_account.create_for_currency(
+        :currency => "USD",
+        :id => merchant.merchant_accounts.first.id
+      )
+      result.should_not be_success
+
+      errors = result.errors.for(:merchant).on(:id)
+      errors[0].code.should == Braintree::ErrorCodes::Merchant::MerchantAccountExistsForId
     end
   end
 

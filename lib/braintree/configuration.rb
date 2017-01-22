@@ -17,7 +17,8 @@ module Braintree
       :proxy_address,
       :proxy_port,
       :proxy_user,
-      :proxy_pass
+      :proxy_pass,
+      :ssl_version
     ]
 
     WRITABLE_ATTRIBUTES = [
@@ -33,7 +34,8 @@ module Braintree
       :proxy_address,
       :proxy_port,
       :proxy_user,
-      :proxy_pass
+      :proxy_pass,
+      :ssl_version
     ]
 
     class << self
@@ -47,7 +49,7 @@ module Braintree
       attributes.each do |attribute|
         (class << self; self; end).send(:define_method, attribute) do
           attribute_value = instance_variable_get("@#{attribute}")
-          raise ConfigurationError.new("Braintree::Configuration.#{attribute.to_s} needs to be set") unless attribute_value
+          raise ConfigurationError.new("Braintree::Configuration.#{attribute.to_s} needs to be set") if attribute_value.nil? || attribute_value.to_s.empty?
           attribute_value
         end
       end
@@ -85,7 +87,8 @@ module Braintree
         :proxy_address => proxy_address,
         :proxy_port => proxy_port,
         :proxy_user => proxy_user,
-        :proxy_pass => proxy_pass
+        :proxy_pass => proxy_pass,
+        :ssl_version => ssl_version
       )
     end
 
