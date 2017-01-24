@@ -12,7 +12,7 @@ module Braintree
     end
 
     def self.create(attributes = {})
-      config.gateway.customer.create(attributes)
+      Configuration.gateway.customer.create(attributes)
     end
 
     def self.create!(attributes = {})
@@ -67,7 +67,7 @@ module Braintree
     end
 
     def self.update(customer_id, attributes)
-      config.gateway.customer.update(customer_id, attributes)
+      Configuration.gateway.customer.update(customer_id, attributes)
     end
 
     def self.update!(customer_id, attributes)

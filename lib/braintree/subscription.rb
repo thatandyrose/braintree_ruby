@@ -43,7 +43,7 @@ module Braintree
     end
 
     def self.create(attributes)
-      config.gateway.subscription.create(attributes)
+      Configuration.gateway.subscription.create(attributes)
     end
 
     def self.create!(attributes)
